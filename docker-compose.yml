@@ -1,0 +1,26 @@
+# Phase 5 baseline: Redis plus a single backend replica on Compose's internal
+# network. No host ports are published; we test via `docker compose exec`.
+# Phases 6 and 7 add app2 / app3 and the NGINX reverse proxy.
+
+services:
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 2s
+    restart: unless-stopped
+
+  app1:
+    build: ./app
+    image: multiserver-app:local
+    environment:
+      SERVER_ID: app1
+      PORT: "8080"
+      REDIS_ADDR: redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
