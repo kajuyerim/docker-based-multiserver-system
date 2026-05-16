@@ -6,6 +6,11 @@ on:
   pull_request:
     branches: [main]
 
+# Opt actions/checkout@v4 and actions/setup-go@v5 into Node.js 24 ahead of
+# the June 2026 default switch (suppresses the deprecation warning).
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 # Cancel any in-flight runs for the same ref when a new commit arrives.
 concurrency:
   group: ci-${{ github.ref }}
