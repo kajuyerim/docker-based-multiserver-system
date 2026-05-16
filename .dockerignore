@@ -1,0 +1,46 @@
+# Repo-root .dockerignore. The actual build context in Phase 4 is ./app,
+# so a second .dockerignore lives there too. This one keeps the repo
+# tidy in case anyone ever runs `docker build .` from the root.
+
+# --- Git ---
+.git
+.gitignore
+.gitattributes
+
+# --- CI / docs / dev tooling (not needed inside the image) ---
+.github
+.editorconfig
+.dockerignore
+README.md
+ARCHITECTURE.md
+CLAUDE.md
+Makefile
+docker-compose.yml
+nginx/
+scripts/
+report/
+
+# --- IDE / editor ---
+.idea
+.vscode
+*.swp
+*.swo
+
+# --- OS junk ---
+.DS_Store
+Thumbs.db
+
+# --- Go test / coverage output and local binaries ---
+*.test
+*.out
+coverage.out
+coverage.html
+/app/app
+/app/bin/
+
+# --- Submission zip ---
+team*.zip
+
+# --- Environment files ---
+.env
+.env.*

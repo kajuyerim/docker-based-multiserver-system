@@ -1,0 +1,29 @@
+# https://editorconfig.org/
+# Enforce consistent line endings and indent style across the repo.
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 2
+insert_final_newline = true
+trim_trailing_whitespace = true
+
+# Go uses tabs by convention (and gofmt enforces it).
+[*.go]
+indent_style = tab
+indent_size = 4
+
+# Makefiles require literal tabs in recipe lines.
+[Makefile]
+indent_style = tab
+
+# YAML/Compose/CI configs.
+[*.{yml,yaml}]
+indent_size = 2
+
+# Markdown often relies on trailing spaces for line breaks.
+[*.md]
+trim_trailing_whitespace = false
