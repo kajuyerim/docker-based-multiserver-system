@@ -1,0 +1,17 @@
+# Test files (go build ignores them anyway; keep them out of the build context).
+*_test.go
+
+# Locally built binaries from `go run` / `go build` outside the container.
+app
+bin/
+*.test
+*.out
+
+# Editor / OS junk.
+.DS_Store
+*.swp
+*.swo
+
+# The Dockerfile and this file don't belong inside the image.
+Dockerfile
+.dockerignore
