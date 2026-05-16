@@ -1,6 +1,8 @@
-# Phase 5 baseline: Redis plus a single backend replica on Compose's internal
-# network. No host ports are published; we test via `docker compose exec`.
-# Phases 6 and 7 add app2 / app3 and the NGINX reverse proxy.
+# Compose stack: Redis plus three identical backend replicas on Compose's
+# internal network. The three replicas share a single image
+# (multiserver-app:local): app1 builds it, app2 and app3 reference it. They
+# differ only by the SERVER_ID env var. No host ports are published yet —
+# Phase 7 will add nginx on host port 8080.
 
 services:
   redis:
@@ -18,6 +20,28 @@ services:
     image: multiserver-app:local
     environment:
       SERVER_ID: app1
+      PORT: "8080"
+      REDIS_ADDR: redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  app2:
+    image: multiserver-app:local
+    environment:
+      SERVER_ID: app2
+      PORT: "8080"
+      REDIS_ADDR: redis:6379
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  app3:
+    image: multiserver-app:local
+    environment:
+      SERVER_ID: app3
       PORT: "8080"
       REDIS_ADDR: redis:6379
     depends_on:
