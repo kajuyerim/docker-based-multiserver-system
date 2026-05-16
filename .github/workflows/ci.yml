@@ -1,0 +1,45 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+# Cancel any in-flight runs for the same ref when a new commit arrives.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    name: vet + test + build + smoke
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.26'
+          cache-dependency-path: app/go.sum
+
+      - name: go vet
+        working-directory: ./app
+        run: go vet ./...
+
+      - name: go test -race
+        working-directory: ./app
+        run: go test -race -v ./...
+
+      - name: docker compose build
+        run: docker compose build
+
+      - name: Smoke test (compose up, run, tear down)
+        run: |
+          chmod +x scripts/test.sh
+          docker compose up -d
+          ./scripts/test.sh
+          docker compose down
