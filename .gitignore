@@ -23,10 +23,12 @@ go.work.sum
 team*.zip
 
 # --- Submission metadata (academic info — local only, never push) ---
-# Contains team number + student IDs that the Phase 15 `make zip` target
-# injects into the staged README. A committed `submission.txt.example`
-# template documents the format.
+# Contains team number + student IDs that the local
+# scripts/build-submission.sh injects into the staged README.
 submission.txt
+
+# --- Local-only submission build script (not for the public repo) ---
+scripts/build-submission.sh
 
 # --- Course report (academic deliverable — sent to professor outside the repo) ---
 # Drafted as report.md, exported to report.pdf via VS Code's Markdown PDF

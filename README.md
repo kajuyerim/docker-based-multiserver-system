@@ -131,8 +131,7 @@ Every response carries:
 │   ├── test.sh                end-to-end smoke (used by CI)
 │   └── experiments.sh         captures behavior experiments to text files
 ├── .github/workflows/ci.yml   CI pipeline
-├── docker-compose.yml         stack definition (5 services)
-└── Makefile                   convenience targets (up / down / test)
+└── docker-compose.yml         stack definition (5 services)
 ```
 
 ---
