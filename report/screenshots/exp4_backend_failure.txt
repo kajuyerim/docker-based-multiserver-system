@@ -1,0 +1,16 @@
+=== Experiment 4: Backend failure (stop app2; >=90% success on 20 reqs) ===
+2026-05-17 01:10:08
+Target: http://localhost:8080
+
+Stopping app2...
+
+Running 20 requests:
+Result: ok=20 / 20  fail=0  (spec target >=18/20)
+
+Restarting app2...
+Waiting 15s for healthcheck to flip + nginx fail_timeout (10s) to expire...
+
+Distribution after restart (15 requests; all three replicas should reappear):
+   5 X-Server-Id: app1
+   5 X-Server-Id: app2
+   5 X-Server-Id: app3

@@ -1,0 +1,25 @@
+=== Experiment 3: Shared Redis store (/store on one replica, /get from others) ===
+2026-05-17 01:10:08
+Target: http://localhost:8080
+
+Expectation: value written once is readable from any replica.
+
+STORE:
+HTTP/1.1 200 OK
+Server: nginx/1.27.5
+Date: Sat, 16 May 2026 22:10:08 GMT
+Content-Type: application/json
+Content-Length: 67
+Connection: keep-alive
+X-Request-Id: d9fd660e24e3582c67aa23f816ff47c3
+X-Server-Id: app3
+
+{"server_id":"app3","key":"cmpe476","value":"distributed-systems"}
+
+GET /get?key=cmpe476 (6 times — should land on different replicas):
+"server_id":"app1"  {"server_id":"app1","key":"cmpe476","value":"distributed-systems"}
+"server_id":"app2"  {"server_id":"app2","key":"cmpe476","value":"distributed-systems"}
+"server_id":"app3"  {"server_id":"app3","key":"cmpe476","value":"distributed-systems"}
+"server_id":"app1"  {"server_id":"app1","key":"cmpe476","value":"distributed-systems"}
+"server_id":"app2"  {"server_id":"app2","key":"cmpe476","value":"distributed-systems"}
+"server_id":"app3"  {"server_id":"app3","key":"cmpe476","value":"distributed-systems"}

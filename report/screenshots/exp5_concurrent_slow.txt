@@ -1,0 +1,15 @@
+=== Experiment 5: 5 concurrent /slow?seconds=3 requests ===
+2026-05-17 01:10:28
+Target: http://localhost:8080
+
+Expectation: nginx round-robins to different replicas in parallel, so
+wall time is ~3-4 s (parallel) instead of ~15 s (serial).
+
+Per-request replica:
+  #1: X-Server-Id: app2
+  #2: X-Server-Id: app1
+  #3: X-Server-Id: app3
+  #4: X-Server-Id: app1
+  #5: X-Server-Id: app2
+
+Total wall time: 3 seconds

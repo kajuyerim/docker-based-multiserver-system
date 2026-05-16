@@ -3,6 +3,8 @@
 > An NGINX reverse proxy fronting three identical Go backend replicas, all sharing a single
 > Redis key-value store. Orchestrated by Docker Compose.
 
+[![CI](https://github.com/Kerem-Kurt/docker-based-multiserver-system/actions/workflows/ci.yml/badge.svg)](https://github.com/Kerem-Kurt/docker-based-multiserver-system/actions/workflows/ci.yml)
+
 ---
 
 ## Status
