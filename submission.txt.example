@@ -1,0 +1,10 @@
+# Template for the academic metadata that `make zip` injects into the
+# archived README. Copy this file to `submission.txt` (gitignored) and
+# replace the placeholders with real values before running `make zip`.
+
+**Team _NN_** — _CMPE476 Distributed Systems, Spring 2026_
+
+| Name | Student ID |
+|------|------------|
+| Kerem Haktan Kurt | _STUDENT_ID_1_ |
+| Kerem Bozkurt     | _STUDENT_ID_2_ |

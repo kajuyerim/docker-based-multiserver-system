@@ -28,6 +28,13 @@ team*.zip
 # template documents the format.
 submission.txt
 
+# --- Course report (academic deliverable — sent to professor outside the repo) ---
+# Drafted as report.md, exported to report.pdf via VS Code's Markdown PDF
+# extension. Neither file is committed; only the captured experiment outputs
+# in report/screenshots/ are public on GitHub.
+report/report.md
+report/report.pdf
+
 # --- Environment files (never commit secrets) ---
 .env
 .env.*
