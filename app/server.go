@@ -108,9 +108,10 @@ func (s *Server) handleStore(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.writeJSON(w, http.StatusOK, storeResponse{
-		ServerID: s.serverID,
+		Stored:   true,
 		Key:      key,
 		Value:    value,
+		ServerID: s.serverID,
 	})
 }
 
@@ -197,9 +198,10 @@ type rootResponse struct {
 }
 
 type storeResponse struct {
-	ServerID string `json:"server_id"`
+	Stored   bool   `json:"stored"`
 	Key      string `json:"key"`
 	Value    string `json:"value"`
+	ServerID string `json:"server_id"`
 }
 
 type getResponse struct {

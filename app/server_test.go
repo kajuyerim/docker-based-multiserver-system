@@ -90,7 +90,7 @@ func TestStore_AndGet_RoundTrip(t *testing.T) {
 	}
 	var sb storeResponse
 	decode(t, rec, &sb)
-	if sb.Key != "course" || sb.Value != "distsys" || sb.ServerID != "app1" {
+	if !sb.Stored || sb.Key != "course" || sb.Value != "distsys" || sb.ServerID != "app1" {
 		t.Errorf("store body: %+v", sb)
 	}
 
