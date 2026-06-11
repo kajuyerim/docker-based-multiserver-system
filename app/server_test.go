@@ -221,6 +221,48 @@ func TestRequestID_PropagatedFromIncomingHeader(t *testing.T) {
 
 // --- helpers ---
 
+func TestInFlight_TracksActiveRequests(t *testing.T) {
+	srv, _ := newTestServer(t)
+
+	var during int64
+	srv.sleep = func(time.Duration) { during = srv.InFlight() }
+
+	rec := do(t, srv, http.MethodGet, "/slow?seconds=1")
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status: %d", rec.Code)
+	}
+	if during != 1 {
+		t.Errorf("in-flight during handler: got %d, want 1", during)
+	}
+	if after := srv.InFlight(); after != 0 {
+		t.Errorf("in-flight after response: got %d, want 0", after)
+	}
+}
+
+func TestChain_FirstMiddlewareIsOutermost(t *testing.T) {
+	var order []string
+	tag := func(name string) func(http.Handler) http.Handler {
+		return func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				order = append(order, name)
+				next.ServeHTTP(w, r)
+			})
+		}
+	}
+	h := chain(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {
+		order = append(order, "handler")
+	}), tag("outer"), tag("inner"))
+
+	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
+
+	want := []string{"outer", "inner", "handler"}
+	for i := range want {
+		if i >= len(order) || order[i] != want[i] {
+			t.Fatalf("execution order: got %v, want %v", order, want)
+		}
+	}
+}
+
 func do(t *testing.T, srv *Server, method, target string) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequest(method, target, nil)

@@ -19,6 +19,7 @@ type Server struct {
 	serverID string
 	rdb      *redis.Client
 	localCnt atomic.Int64
+	inFlight atomic.Int64
 	logger   *slog.Logger
 	sleep    func(time.Duration)
 }
@@ -33,7 +34,7 @@ func NewServer(serverID string, rdb *redis.Client) *Server {
 	}
 }
 
-// Handler returns the root http.Handler with response-header middleware applied.
+// Handler returns the root http.Handler with the middleware chain applied.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", s.handleHealth)
@@ -41,7 +42,29 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/get", s.handleGet)
 	mux.HandleFunc("/slow", s.handleSlow)
 	mux.HandleFunc("/", s.handleRoot)
-	return s.withResponseHeaders(mux)
+	return chain(mux, s.withInFlight, s.withResponseHeaders)
+}
+
+// InFlight reports the number of requests currently being served.
+func (s *Server) InFlight() int64 {
+	return s.inFlight.Load()
+}
+
+// chain wraps h in the given middleware; the first middleware is outermost
+// (runs first on the way in, last on the way out).
+func chain(h http.Handler, mw ...func(http.Handler) http.Handler) http.Handler {
+	for i := len(mw) - 1; i >= 0; i-- {
+		h = mw[i](h)
+	}
+	return h
+}
+
+func (s *Server) withInFlight(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		s.inFlight.Add(1)
+		defer s.inFlight.Add(-1)
+		next.ServeHTTP(w, r)
+	})
 }
 
 func (s *Server) withResponseHeaders(next http.Handler) http.Handler {
