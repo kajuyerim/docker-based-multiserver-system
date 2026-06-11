@@ -37,8 +37,19 @@ func main() {
 	srv := NewServer(serverID, rdb)
 
 	addr := ":" + port
+	httpSrv := &http.Server{
+		Addr:              addr,
+		Handler:           srv.Handler(),
+		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       10 * time.Second,
+		// /slow legitimately runs for up to 10s; the write deadline must
+		// clear it (nginx gives up earlier anyway, at proxy_read_timeout 15s).
+		WriteTimeout: 20 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
+
 	logger.Info("backend starting", "server_id", serverID, "addr", addr, "redis", redisAddr)
-	if err := http.ListenAndServe(addr, srv.Handler()); err != nil {
+	if err := httpSrv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		logger.Error("server exited", "err", err)
 		os.Exit(1)
 	}
