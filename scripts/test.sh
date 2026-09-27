@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #
-# Smoke test for the multiserver stack. Exercises every endpoint via nginx
-# on host port 8080. Prints the actual response (status, key headers, body)
+# Smoke test for the multiserver stack. Exercises every endpoint over TLS via
+# nginx on host port 8443. Prints the actual response (status, key headers, body)
 # next to each assertion so the reader can see what the system did, not just
 # whether the test passed.
 #
@@ -10,7 +10,11 @@
 
 set -uo pipefail
 
-BASE_URL="${BASE_URL:-http://localhost:8080}"
+BASE_URL="${BASE_URL:-https://localhost:8443}"
+CURL_TLS_FLAGS=()
+if [[ "$BASE_URL" == https://* ]]; then
+    CURL_TLS_FLAGS=(-k)
+fi
 
 pass=0
 fail=0
@@ -22,7 +26,7 @@ failures=()
 hit() {
     local path="$1"
     local tmp; tmp=$(mktemp)
-    BODY=$(curl -sS -D "$tmp" -o - "$BASE_URL$path" 2>/dev/null) || true
+    BODY=$(curl "${CURL_TLS_FLAGS[@]}" -sS -D "$tmp" -o - "$BASE_URL$path" 2>/dev/null) || true
     STATUS=$(awk 'NR==1 {print $2}' "$tmp")
     HEADERS=$(cat "$tmp")
     rm -f "$tmp"
@@ -51,14 +55,14 @@ bad() { fail=$((fail+1)); failures+=("$1"); printf '  FAIL: %s -- %s\n' "$1" "$2
 printf '====== smoke tests against %s ======\n\n' "$BASE_URL"
 printf 'waiting for /health to respond...'
 for _ in $(seq 1 30); do
-    if curl -sf "$BASE_URL/health" >/dev/null 2>&1; then
+    if curl "${CURL_TLS_FLAGS[@]}" -sf "$BASE_URL/health" >/dev/null 2>&1; then
         printf ' ready\n'
         break
     fi
     printf '.'
     sleep 1
 done
-if ! curl -sf "$BASE_URL/health" >/dev/null 2>&1; then
+if ! curl "${CURL_TLS_FLAGS[@]}" -sf "$BASE_URL/health" >/dev/null 2>&1; then
     printf '\nERROR: %s/health not reachable after 30s. Is the stack up?\n' "$BASE_URL"
     exit 1
 fi
@@ -188,7 +192,7 @@ section 'round-robin distribution (30 requests through nginx)'
 printf 'firing 30 sequential GET / requests...\n'
 
 dist=$(for _ in $(seq 1 30); do
-    curl -sS -D - -o /dev/null "$BASE_URL/" \
+    curl "${CURL_TLS_FLAGS[@]}" -sS -D - -o /dev/null "$BASE_URL/" \
         | grep -i "^x-server-id:" | head -n1
 done | sort | uniq -c)
 

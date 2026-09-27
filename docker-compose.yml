@@ -58,8 +58,10 @@ services:
     image: nginx:1.27-alpine
     ports:
       - "8080:80"
+      - "8443:443"
     volumes:
       - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx/certs:/etc/nginx/certs:ro
     depends_on:
       app1:
         condition: service_healthy

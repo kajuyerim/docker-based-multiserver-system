@@ -34,6 +34,9 @@ jobs:
         working-directory: ./app
         run: go test -race -v ./...
 
+      - name: Generate local TLS certificate
+        run: ./scripts/gen-cert.sh
+
       - name: docker compose build
         run: docker compose build
 

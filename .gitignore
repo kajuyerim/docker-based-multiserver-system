@@ -42,6 +42,9 @@ report/report.pdf
 .env.*
 !.env.example
 
+# --- Locally generated TLS material ---
+/nginx/certs/
+
 # --- macOS / Windows / Linux junk ---
 .DS_Store
 .AppleDouble
