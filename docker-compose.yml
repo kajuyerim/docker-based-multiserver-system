@@ -15,6 +15,8 @@ services:
       start_period: 2s
     restart: unless-stopped
 
+  # stop_grace_period must exceed the app's 12s shutdown drain, which in turn
+  # exceeds the longest legal request (/slow caps at 10s): 10s < 12s < 15s.
   app1:
     build: ./app
     image: multiserver-app:local
@@ -25,6 +27,7 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+    stop_grace_period: 15s
     restart: unless-stopped
 
   app2:
@@ -36,6 +39,7 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+    stop_grace_period: 15s
     restart: unless-stopped
 
   app3:
@@ -47,6 +51,7 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+    stop_grace_period: 15s
     restart: unless-stopped
 
   nginx:
