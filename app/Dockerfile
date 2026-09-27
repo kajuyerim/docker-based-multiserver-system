@@ -25,7 +25,7 @@ FROM alpine:3.20 AS runtime
 
 LABEL org.opencontainers.image.title="multiserver-app" \
       org.opencontainers.image.description="CMPE476 Project 2 backend replica" \
-      org.opencontainers.image.source="https://github.com/Kerem-Kurt/docker-based-multiserver-system"
+      org.opencontainers.image.source="https://github.com/kajuyerim/docker-based-multiserver-system"
 
 # wget for the HEALTHCHECK probe; ca-certificates for any outbound TLS calls.
 RUN apk add --no-cache wget ca-certificates
