@@ -26,6 +26,7 @@ type Server struct {
 	inFlight atomic.Int64
 	logger   *slog.Logger
 	sleep    func(time.Duration)
+	metrics  *serverMetrics
 }
 
 // NewServer constructs a Server; a nil reader uses the primary for reads.
@@ -33,13 +34,15 @@ func NewServer(serverID string, primary, reader *redis.Client) *Server {
 	if reader == nil {
 		reader = primary
 	}
-	return &Server{
+	s := &Server{
 		serverID: serverID,
 		primary:  primary,
 		reader:   reader,
 		logger:   slog.Default(),
 		sleep:    time.Sleep,
 	}
+	s.metrics = newServerMetrics(s)
+	return s
 }
 
 // Handler returns the root http.Handler with the middleware chain applied.
@@ -54,8 +57,9 @@ func (s *Server) HandlerWithAuth(token string) http.Handler {
 	mux.HandleFunc("/store", s.handleStore)
 	mux.HandleFunc("/get", s.handleGet)
 	mux.HandleFunc("/slow", s.handleSlow)
+	mux.Handle("/metrics", s.metrics.handler)
 	mux.HandleFunc("/", s.handleRoot)
-	return chain(mux, s.withInFlight, s.withResponseHeaders, s.withAuth(token))
+	return chain(mux, s.withInFlight, s.withResponseHeaders, s.withMetrics, s.withAuth(token))
 }
 
 func (s *Server) withAuth(token string) func(http.Handler) http.Handler {
