@@ -49,6 +49,17 @@ jobs:
       - name: Redis replication and persistence tests
         run: ./scripts/test-redis.sh
 
+      - name: Rate limiting without authentication
+        run: ./scripts/test-security.sh
+
+      - name: Authentication and authenticated smoke tests
+        env:
+          AUTH_TOKEN: ci-only-integration-token
+        run: |
+          docker compose up -d --wait --wait-timeout 90
+          ./scripts/test-security.sh
+          ./scripts/test.sh
+
       - name: Diagnostics on failure
         if: failure()
         run: |

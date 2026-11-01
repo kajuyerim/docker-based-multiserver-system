@@ -10,6 +10,10 @@
 
 set -uo pipefail
 
+script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=lib/http.sh
+source "$script_dir/lib/http.sh"
 BASE_URL="${BASE_URL:-https://localhost:8443}"
 CURL_TLS_FLAG=''
 if [[ "$BASE_URL" == https://* ]]; then
@@ -29,7 +33,7 @@ smoke_value="fixture-$run_id"
 hit() {
     local path="$1"
     local tmp; tmp=$(mktemp)
-    BODY=$(curl ${CURL_TLS_FLAG:+"$CURL_TLS_FLAG"} --connect-timeout 1 --max-time "${2:-15}" \
+    BODY=$(http_curl ${CURL_TLS_FLAG:+"$CURL_TLS_FLAG"} --connect-timeout 1 --max-time "${2:-15}" \
         -sS -D "$tmp" -o - "$BASE_URL$path" 2>/dev/null) || true
     STATUS=$(awk 'NR==1 {print $2}' "$tmp")
     HEADERS=$(cat "$tmp")
@@ -59,14 +63,14 @@ bad() { fail=$((fail+1)); failures+=("$1"); printf '  FAIL: %s -- %s\n' "$1" "$2
 printf '====== smoke tests against %s ======\n\n' "$BASE_URL"
 printf 'waiting for /health to respond...'
 for _ in $(seq 1 30); do
-    if curl ${CURL_TLS_FLAG:+"$CURL_TLS_FLAG"} --connect-timeout 1 --max-time 1 -sf "$BASE_URL/health" >/dev/null 2>&1; then
+    if http_curl ${CURL_TLS_FLAG:+"$CURL_TLS_FLAG"} --connect-timeout 1 --max-time 1 -sf "$BASE_URL/health" >/dev/null 2>&1; then
         printf ' ready\n'
         break
     fi
     printf '.'
     sleep 1
 done
-if ! curl ${CURL_TLS_FLAG:+"$CURL_TLS_FLAG"} --connect-timeout 1 --max-time 1 -sf "$BASE_URL/health" >/dev/null 2>&1; then
+if ! http_curl ${CURL_TLS_FLAG:+"$CURL_TLS_FLAG"} --connect-timeout 1 --max-time 1 -sf "$BASE_URL/health" >/dev/null 2>&1; then
     printf '\nERROR: %s/health not reachable after 30s. Is the stack up?\n' "$BASE_URL"
     exit 1
 fi
@@ -205,8 +209,9 @@ section 'round-robin distribution (30 requests through nginx)'
 printf 'firing 30 sequential GET / requests...\n'
 
 dist=$(for _ in $(seq 1 30); do
-    curl ${CURL_TLS_FLAG:+"$CURL_TLS_FLAG"} --connect-timeout 1 --max-time 5 -sS -D - -o /dev/null "$BASE_URL/" \
+    http_curl ${CURL_TLS_FLAG:+"$CURL_TLS_FLAG"} --connect-timeout 1 --max-time 5 -sS -D - -o /dev/null "$BASE_URL/" \
         | grep -i "^x-server-id:" | head -n1
+    sleep 0.12
 done | sort | uniq -c)
 
 printf '  observed:\n'

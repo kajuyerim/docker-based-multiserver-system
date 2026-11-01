@@ -3,12 +3,14 @@ package main
 import (
 	"context"
 	"crypto/rand"
+	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -42,13 +44,38 @@ func NewServer(serverID string, primary, reader *redis.Client) *Server {
 
 // Handler returns the root http.Handler with the middleware chain applied.
 func (s *Server) Handler() http.Handler {
+	return s.HandlerWithAuth("")
+}
+
+// HandlerWithAuth requires a bearer token on every request when token is nonempty.
+func (s *Server) HandlerWithAuth(token string) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/health", s.handleHealth)
 	mux.HandleFunc("/store", s.handleStore)
 	mux.HandleFunc("/get", s.handleGet)
 	mux.HandleFunc("/slow", s.handleSlow)
 	mux.HandleFunc("/", s.handleRoot)
-	return chain(mux, s.withInFlight, s.withResponseHeaders)
+	return chain(mux, s.withInFlight, s.withResponseHeaders, s.withAuth(token))
+}
+
+func (s *Server) withAuth(token string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		if token == "" {
+			return next
+		}
+		expected := []byte(token)
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			headers := r.Header.Values("Authorization")
+			scheme, credential, separated := strings.Cut(r.Header.Get("Authorization"), " ")
+			credential = strings.TrimLeft(credential, " ")
+			if len(headers) != 1 || !separated || !strings.EqualFold(scheme, "Bearer") || subtle.ConstantTimeCompare([]byte(credential), expected) != 1 {
+				w.Header().Set("WWW-Authenticate", "Bearer")
+				s.writeJSON(w, http.StatusUnauthorized, errorResponse{Error: "unauthorized"})
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 
 // InFlight reports the number of requests currently being served.

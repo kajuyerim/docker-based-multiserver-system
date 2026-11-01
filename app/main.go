@@ -5,6 +5,7 @@
 //   - PORT:       TCP port to listen on (defaults to 8080).
 //   - REDIS_ADDR: host:port of the shared Redis store (defaults to localhost:6379).
 //   - REDIS_READ_ADDR: optional host:port for reads (defaults to REDIS_ADDR).
+//   - AUTH_TOKEN: optional bearer token required on all endpoints when set.
 package main
 
 import (
@@ -28,6 +29,7 @@ func main() {
 	port := envOrDefault("PORT", "8080")
 	redisAddr := envOrDefault("REDIS_ADDR", "localhost:6379")
 	redisReadAddr := envOrDefault("REDIS_READ_ADDR", redisAddr)
+	authToken := os.Getenv("AUTH_TOKEN")
 
 	rdb := redis.NewClient(&redis.Options{Addr: redisAddr, ContextTimeoutEnabled: true})
 	defer rdb.Close()
@@ -60,7 +62,7 @@ func main() {
 	addr := ":" + port
 	httpSrv := &http.Server{
 		Addr:              addr,
-		Handler:           srv.Handler(),
+		Handler:           srv.HandlerWithAuth(authToken),
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       10 * time.Second,
 		// /slow legitimately runs for up to 10s; the write deadline must
@@ -78,7 +80,7 @@ func main() {
 	}()
 
 	logger.Info("backend starting", "server_id", serverID, "addr", addr,
-		"redis", redisAddr, "redis_read", redisReadAddr)
+		"redis", redisAddr, "redis_read", redisReadAddr, "auth_enabled", authToken != "")
 
 	select {
 	case err := <-errCh:
