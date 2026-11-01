@@ -1,18 +1,49 @@
 # Compose stack: NGINX reverse proxy in front of three Go backend replicas
-# that share one Redis store. The three app containers run the same image
-# (built once by app1, tagged multiserver-app:local) and differ only by the
-# SERVER_ID env var. NGINX is the ONLY service publishing a host port — all
-# other services live on Compose's internal network.
+# backed by a persistent Redis primary and a read replica. The app containers
+# run the same image (built once by app1, tagged multiserver-app:local) and
+# differ only by SERVER_ID. NGINX is the only service publishing host ports;
+# all other services live on Compose's internal network.
 
 services:
   redis:
     image: redis:7-alpine
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec"]
+    volumes:
+      - redis-data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 3s
       retries: 5
       start_period: 2s
+    restart: unless-stopped
+
+  redis-replica:
+    image: redis:7-alpine
+    command:
+      - redis-server
+      - --replicaof
+      - redis
+      - "6379"
+      - --replica-read-only
+      - "yes"
+      - --replica-serve-stale-data
+      - "no"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - |
+          info=$$(redis-cli --raw INFO replication) || exit 1
+          printf '%s\n' "$$info" | tr -d '\r' | grep -qx 'role:slave' &&
+          printf '%s\n' "$$info" | tr -d '\r' | grep -qx 'master_link_status:up' &&
+          printf '%s\n' "$$info" | tr -d '\r' | grep -qx 'master_sync_in_progress:0'
+      interval: 2s
+      timeout: 3s
+      retries: 15
+      start_period: 5s
     restart: unless-stopped
 
   # stop_grace_period must exceed the app's 12s shutdown drain, which in turn
@@ -70,3 +101,6 @@ services:
       app3:
         condition: service_healthy
     restart: unless-stopped
+
+volumes:
+  redis-data:
