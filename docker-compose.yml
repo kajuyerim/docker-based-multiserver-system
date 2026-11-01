@@ -57,10 +57,13 @@ services:
       REDIS_ADDR: redis:6379
       REDIS_READ_ADDR: redis-replica:6379
       AUTH_TOKEN: ${AUTH_TOKEN:-}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
     depends_on:
       redis:
         condition: service_healthy
       redis-replica:
+        condition: service_healthy
+      jaeger:
         condition: service_healthy
     stop_grace_period: 15s
     restart: unless-stopped
@@ -73,10 +76,13 @@ services:
       REDIS_ADDR: redis:6379
       REDIS_READ_ADDR: redis-replica:6379
       AUTH_TOKEN: ${AUTH_TOKEN:-}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
     depends_on:
       redis:
         condition: service_healthy
       redis-replica:
+        condition: service_healthy
+      jaeger:
         condition: service_healthy
     stop_grace_period: 15s
     restart: unless-stopped
@@ -89,12 +95,27 @@ services:
       REDIS_ADDR: redis:6379
       REDIS_READ_ADDR: redis-replica:6379
       AUTH_TOKEN: ${AUTH_TOKEN:-}
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://jaeger:4318
     depends_on:
       redis:
         condition: service_healthy
       redis-replica:
         condition: service_healthy
+      jaeger:
+        condition: service_healthy
     stop_grace_period: 15s
+    restart: unless-stopped
+
+  jaeger:
+    image: jaegertracing/jaeger:2.22.0
+    command: ["--config", "/etc/jaeger/config.yml"]
+    volumes:
+      - ./monitoring/jaeger/config.yml:/etc/jaeger/config.yml:ro
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "--quiet", "http://127.0.0.1:13133/status"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
     restart: unless-stopped
 
   prometheus:
@@ -157,13 +178,14 @@ services:
       AUTH_TOKEN: ${RENDERER_AUTH_TOKEN:-local-renderer-only}
 
   nginx:
-    image: nginx:1.27-alpine
+    image: nginx:1.27.5-alpine-otel
     environment:
       AUTH_TOKEN: ${AUTH_TOKEN:-}
     ports:
       - "8080:80"
       - "8443:443"
     volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
       - ./nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
       - ./nginx/certs:/etc/nginx/certs:ro
     depends_on:

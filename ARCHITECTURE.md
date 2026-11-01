@@ -12,7 +12,8 @@ makes.
 A reverse-proxy load balancer (NGINX) fronts three identical stateless
 backend replicas (Go). All writes go to a persistent Redis primary;
 `/get` reads go to its read replica. Prometheus scrapes each backend,
-and Grafana provides a provisioned dashboard. These eight services use
+and Grafana provides a provisioned dashboard. Jaeger collects proxy, HTTP,
+and Redis spans. These nine default services use
 Compose's internal network; only NGINX publishes host ports.
 
 ```mermaid
@@ -35,6 +36,11 @@ flowchart LR
     prometheus -. /metrics every 5s .-> app1
     prometheus -. /metrics every 5s .-> app2
     prometheus -. /metrics every 5s .-> app3
+    nginx -->|/jaeger/| jaeger[Jaeger]
+    nginx -. OTLP gRPC :4317 .-> jaeger
+    app1 -. OTLP HTTP :4318 .-> jaeger
+    app2 -. OTLP HTTP :4318 .-> jaeger
+    app3 -. OTLP HTTP :4318 .-> jaeger
 ```
 
 The interesting questions are: why three replicas? why one proxy? why Redis
@@ -188,12 +194,26 @@ The config in [`nginx/default.conf`](nginx/default.conf) is intentionally
 small. The directives that matter for failover and tracing are below.
 
 ```nginx
+resolver 127.0.0.11 valid=5s ipv6=off;
+resolver_timeout 2s;
 upstream backend {
-    server app1:8080 max_fails=1 fail_timeout=10s;
-    server app2:8080 max_fails=1 fail_timeout=10s;
-    server app3:8080 max_fails=1 fail_timeout=10s;
+    zone backend 64k;
+    server app1:8080 resolve max_fails=1 fail_timeout=10s;
+    server app2:8080 resolve max_fails=1 fail_timeout=10s;
+    server app3:8080 resolve max_fails=1 fail_timeout=10s;
 }
 ```
+
+Docker can assign a different internal address when containers recover.
+Shared upstream zones and `resolve` refresh names through Docker's DNS
+server every five seconds instead of retaining startup addresses. The
+monitoring UI upstreams use the same pattern. NGINX 1.27.5 supports this
+without a reload. The OpenTelemetry module exports to a loopback-only
+HTTP/2 gRPC listener inside NGINX. That listener forwards to a shared,
+dynamically resolved Jaeger upstream, avoiding independent exporter workers
+retaining old collector addresses after an outage. Connect/read/send
+budgets on this relay are one/two/two seconds; it does not create spans or
+publish another host port.
 
 `max_fails=1 fail_timeout=10s` means: if a request to this backend fails
 once, NGINX marks it unavailable for 10 seconds and skips it for any
@@ -271,7 +291,7 @@ Option B is better because:
 
 1. **Build time.** One `go build` per code change, not three. CI is ~3×
    faster.
-2. **Image footprint.** One ~34 MB image on disk, not three.
+2. **Image footprint.** One backend image on disk, not three.
 3. **Configuration as data, not artifact.** Replica identity is just an
    env var; you can spin up `app4` without rebuilding anything. This is
    the [12-factor app](https://12factor.net/config) principle of
@@ -307,10 +327,9 @@ image:
 
 - Builder stage: `golang:1.26-alpine` → produces `/out/app`.
 - Runtime stage: `alpine:3.20` (~5 MB) + `wget` for the healthcheck +
-  the binary. Final image ~34 MB.
+  the compiled binary and its runtime dependencies.
 
-That's ~10× smaller, and it eliminates whole categories of CVEs by not
-including the compiler in production.
+The runtime image omits the compiler, build tools, and source tree.
 
 `-trimpath -ldflags="-s -w"` strips absolute file paths and the symbol
 table from the binary — saves a few more megabytes and makes the binary
@@ -340,9 +359,11 @@ Certificates are mounted read-only and private keys remain gitignored.
 The Go process traps SIGTERM/Interrupt and drains HTTP requests before
 closing its distinct Redis clients. The longest `/slow` request is ten
 seconds, the drain allows twelve seconds, and Compose allows fifteen
-seconds before forceful termination: `10s < 12s < 15s`. An atomic
-in-flight gauge records active work in shutdown logs. Draining one
-backend preserves active requests while NGINX can use the others.
+seconds before forceful termination. After draining, the tracing SDK gets
+a separate two-second flush budget: `10s < 12s`, and `12s + 2s < 15s`. An
+atomic in-flight gauge records active work in shutdown logs. Draining one
+backend preserves active requests while NGINX can use the others; failed
+trace export does not keep the process alive past that flush budget.
 
 ---
 
@@ -361,6 +382,8 @@ healthchecks are:
 - `redis-replica` → role is replica, primary link is up, and initial
   synchronization has finished. It starts after a healthy primary;
   backends wait for both Redis services.
+- `jaeger` → its internal health extension on `/status` responds;
+  backends wait for Jaeger as well as both Redis services at startup.
 - `app1` / `app2` / `app3` → an authenticated `wget --spider /health`
   request (the HTTP server is responding).
 - `prometheus` → its internal `/-/healthy` endpoint responds; startup waits
@@ -371,9 +394,10 @@ healthchecks are:
 
 NGINX waits for all three apps and both monitoring services to be healthy,
 then starts itself. The `docker compose up -d --wait --wait-timeout 90`
-command used in CI additionally waits for all eight services to report
-healthy. Earlier Redis acceptance timing is retained as historical evidence;
-first-run monitoring image downloads also depend on the network.
+command used in CI additionally waits for all nine default services to report
+healthy. The optional `render` profile adds a tenth service for screenshots.
+Earlier six-service Redis and eight-service monitoring timings remain
+historical evidence; first-run image downloads depend on the network.
 
 These are startup gates, not ongoing dependency restarts. `/health`
 remains a process-liveness check and does not ping Redis. A later Redis
@@ -485,44 +509,68 @@ changes to the provisioned dashboard should be made in its JSON source.
 
 ---
 
-## Tracing without OpenTelemetry
+## Distributed traces across NGINX, Go, and Redis
 
-Distributed tracing usually implies OTLP, Jaeger, a sampling story, a
-backend storage system, dashboards. For this small stack you don't
-need any of that — just a per-request id that propagates.
+The official `nginx:1.27.5-alpine-otel` image bundles its compatible native
+OpenTelemetry module. The main NGINX configuration loads it; API locations
+create proxy spans and use `otel_trace_context propagate` to extract a valid
+incoming W3C `traceparent` and inject the child context upstream. This makes
+NGINX a real participant in the trace, with `service.name=nginx`, rather than
+only forwarding a client's header. NGINX exports OTLP/gRPC to `jaeger:4317`.
 
-NGINX has `$request_id` built in (a 32-char hex string per request). We
-set it as a request header before proxying:
+The Go backend uses `otelhttp` for server spans and `redisotel` for child
+client spans. Its resource is `service.name=multiserver-backend` with
+`service.instance.id=app1|app2|app3`. HTTP span names and `http.route` use the
+same bounded route set as metrics. Redis command names identify `get`, `set`,
+or `incr`, while endpoint attributes distinguish primary and replica access.
+For a stored-value request, the parent chain is client context → NGINX server
+span → Go server span → Redis client span; the external client parent need
+not itself be exported to Jaeger.
 
-```nginx
-proxy_set_header X-Request-Id $request_id;
-```
+`OTEL_EXPORTER_OTLP_ENDPOINT` is an optional Go OTLP/HTTP base URL. Compose
+sets `http://jaeger:4318` on all three replicas, and the exporter appends
+`/v1/traces`. An empty or unset variable selects a no-op provider for local
+standalone execution. The SDK uses parent-based sampling with new roots
+sampled by default, and batches exports off the request path. Export timeouts
+are bounded; a collector outage can lose traces but does not turn a successful
+Redis/API operation into a failure. Shutdown drains requests and then gives
+SDK flush up to two seconds within the existing fifteen-second Compose grace.
 
-The backend's middleware reads `X-Request-Id` from the incoming request,
-logs it (structured JSON via `log/slog`), and stamps it on the response
-header:
+Health probes, metrics scrapes, and monitoring UI traffic do not create
+request traces. Redis startup pings, connection negotiation, and background
+metrics reads are excluded as well, keeping Jaeger focused on application
+work. This also prevents self-observation traffic from overwhelming the
+local trace store.
 
-```go
-w.Header().Set("X-Request-Id", requestID)
-```
+NGINX still generates `X-Request-Id` and forwards it unchanged to the backend.
+The existing structured request logs and response header remain useful for
+finding an individual request. That ID also becomes `request.id` on NGINX,
+Go HTTP, and Redis spans. NGINX adds `X-Trace-Id` to traced API responses so a
+client can open the corresponding Jaeger trace. A malformed `traceparent`
+starts a new valid trace without changing the endpoint's normal behavior.
 
-A client running `curl -i` sees:
+Backend instrumentation omits query strings, authorization headers, Redis
+keys/values, and database statements. Native NGINX spans can initially contain
+query text in `http.target`; the Jaeger collector's attribute processor removes
+`http.target`, `url.full`, `url.query`, `db.statement`, and `db.query.text`
+before writing traces to storage. This is collector-side redaction, so
+sensitive query text can still traverse the internal exporter-to-collector
+connection before removal. The live integration runner checks the stored
+trace attributes and events for its unique fixture values and forbidden
+attributes.
 
-```
-X-Request-Id: a1b2c3...
-```
+Jaeger 2.22.0 combines OTLP receivers, the redaction/batch pipeline, and the
+query UI. Its memory backend is limited to 10,000 traces. This is a trace-count
+limit rather than a byte limit: a trace with many spans consumes more memory.
+No trace volume is configured, and restarting Jaeger discards its history.
+The existing Redis persistence and replica-promotion policy are unchanged.
 
-A developer reading `docker compose logs app1` sees:
-
-```json
-{"msg":"request","request_id":"a1b2c3...","method":"GET","path":"/"}
-```
-
-Same id in both places. You can correlate a client-visible error with the
-exact log line that produced it, without any external infrastructure.
-
-If we ever need real tracing, the backend already logs `request_id` — a
-collector that scrapes the JSON logs is a one-day project.
+The UI/API is proxied at `https://localhost:8443/jaeger/`, with no additional
+host ports. It has no authentication in this local demonstration;
+`AUTH_TOKEN` applies to backend endpoints including `/metrics`, not to the
+monitoring UIs. The [sample JSON](report/screenshots/trace_sample.json) and
+[Jaeger screenshot](report/screenshots/tracing_jaeger.png) provide inspectable
+examples of the proxy-to-backend-to-Redis chain.
 
 ---
 
@@ -539,6 +587,7 @@ they're checking:
 | `./scripts/test-redis.sh` (recovery) | Do real Redis replication, deadlines, persistence, and reconnection work? | Redis configuration, routing, or recovery regression. |
 | `./scripts/test-security.sh` (security) | Do optional authentication, NGINX bursts, and rate-limit recovery work without rejected-request mutations? | Authentication or proxy-policy regression. |
 | `python3 scripts/test-metrics.py` (monitoring) | Are all three scrapes healthy, counters unchanged by scrapes, and dashboard queries valid? | Instrumentation, credentials, provisioning, or query regression. |
+| `python3 scripts/test-tracing.py` (tracing) | Does client context form the real NGINX → Go → Redis tree with correct correlation and no stored sensitive fields? | Propagation, instrumentation, export, or redaction regression. |
 | `./scripts/experiments.sh` (evidence) | Does the stack exhibit the documented behaviors? | Captures behavior, including the Redis recovery gate as Experiment 6. |
 
 These remain four tiers: unit logic, concurrency, integration, and
@@ -547,7 +596,7 @@ application routing without pretending to implement replication.
 Real Redis checks cover the behavior that a fake cannot prove.
 
 CI runs `go vet`, race tests, image build, HTTPS smoke, focused Redis
-recovery, security, and metrics/dashboard checks on pushes to `main` and
+recovery, security, metrics/dashboard, and live tracing checks on pushes to `main` and
 pull requests. Authentication-disabled and authentication-enabled runs
 exercise the optional credential path. Failure
 diagnostics include service states and recent logs; teardown always
@@ -612,3 +661,8 @@ debugging.
   with local named-volume storage. Prometheus keeps seven days; off-host
   backups, remote storage, alert delivery, and a shared monitoring access
   policy are not configured.
+
+- **Ephemeral traces.** Jaeger stores at most 10,000 traces in memory, loses
+  them on restart, and has no trace authentication or durable archive.
+  Export is best effort during collector outages. Collector-side redaction
+  removes query/statement attributes before storage, after internal export.

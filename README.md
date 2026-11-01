@@ -2,7 +2,7 @@
 
 > An NGINX reverse proxy fronting three identical Go backends, backed by a persistent
 > Redis primary and a read replica, with Prometheus metrics and a provisioned Grafana
-> dashboard. Orchestrated by Docker Compose.
+> dashboard, plus OpenTelemetry traces in Jaeger. Orchestrated by Docker Compose.
 
 [![CI](https://github.com/kajuyerim/docker-based-multiserver-system/actions/workflows/ci.yml/badge.svg)](https://github.com/kajuyerim/docker-based-multiserver-system/actions/workflows/ci.yml)
 
@@ -12,15 +12,16 @@
 
 ```bash
 ./scripts/gen-cert.sh                              # generate local self-signed TLS material
-docker compose up --build -d --wait --wait-timeout 90 # wait for all eight services
+docker compose up --build -d --wait --wait-timeout 90 # wait for all nine services
 curl -ki https://localhost:8443/health             # HTTPS smoke check
 ./scripts/test.sh                                  # full end-to-end smoke over HTTPS
 python3 scripts/test-metrics.py                    # scrape and dashboard integration checks
+python3 scripts/test-tracing.py                    # NGINX -> Go -> Redis trace verification
 ./scripts/test-redis.sh                            # disruptive Redis recovery checks
 docker compose down                               # stop containers; retain stored data
 ```
 
-The eight-service monitoring [acceptance run](report/screenshots/issue1_acceptance.txt) measured a **24.66-second** cached-image build/startup, within the 90-second budget. First-run image downloads depend on the network. Once up:
+The nine-service tracing [acceptance run](report/screenshots/issue2_acceptance.txt) measured a **24.93-second** cached-image build/startup, within the 90-second budget. First-run image downloads depend on the network. Once up:
 
 | URL | What it does |
 |-----|--------------|
@@ -32,6 +33,7 @@ The eight-service monitoring [acceptance run](report/screenshots/issue1_acceptan
 | `https://localhost:8443/metrics` | Prometheus exposition from the selected backend; honors `AUTH_TOKEN` |
 | [Grafana](https://localhost:8443/grafana/) | Dashboard UI; local login `admin` / `local-grafana-admin` |
 | [Prometheus](https://localhost:8443/prometheus/) | Scrape targets, metric queries, and stored time series |
+| [Jaeger](https://localhost:8443/jaeger/) | NGINX → Go → Redis traces and timing |
 
 ---
 
@@ -40,7 +42,7 @@ The eight-service monitoring [acceptance run](report/screenshots/issue1_acceptan
 ```mermaid
 flowchart LR
     Client[Client / curl]
-    nginx[NGINX 1.27<br/>reverse proxy]
+    nginx[NGINX 1.27.5<br/>proxy + OpenTelemetry]
     app1[app1: Go backend]
     app2[app2: Go backend]
     app3[app3: Go backend]
@@ -66,20 +68,26 @@ flowchart LR
     prometheus -. /metrics every 5s .-> app1
     prometheus -. /metrics every 5s .-> app2
     prometheus -. /metrics every 5s .-> app3
+    nginx -->|/jaeger/| jaeger[Jaeger 2.22.0]
+    nginx -. OTLP gRPC :4317 .-> jaeger
+    app1 -. OTLP HTTP :4318 .-> jaeger
+    app2 -. OTLP HTTP :4318 .-> jaeger
+    app3 -. OTLP HTTP :4318 .-> jaeger
 ```
 
-Eight services, orchestrated by a single `docker-compose.yml`:
+Nine default services, orchestrated by a single `docker-compose.yml` (the optional screenshot renderer adds a tenth):
 
 | Service | Image | Role |
 |---------|-------|------|
-| `nginx` | `nginx:1.27-alpine` | TLS terminator and reverse proxy on host `:8443` (HTTPS) and `:8080` (HTTP). **The only service that publishes host ports.** Round-robin LB with fast failover (see [`nginx/default.conf`](nginx/default.conf)). |
+| `nginx` | `nginx:1.27.5-alpine-otel` | TLS terminator and reverse proxy on host `:8443` (HTTPS) and `:8080` (HTTP). **The only service that publishes host ports.** Round-robin LB with fast failover (see [`nginx/default.conf`](nginx/default.conf)). |
 | `app1`, `app2`, `app3` | `multiserver-app:local` (built once from [`app/`](app/)) | Three identical Go backend replicas. Differ only by the `SERVER_ID` env var, which they stamp on every response as `X-Server-Id`. |
 | `redis` | `redis:7-alpine` | Primary for counter `INCR` and `/store` writes; AOF stored in the named `redis-data` volume. |
 | `redis-replica` | `redis:7-alpine` | Read-only replica serving `/get`; rejects reads while disconnected or synchronizing. |
 | `prometheus` | `prom/prometheus:v3.15.1` | Scrapes all three backends internally every 5 seconds; retains 7 days in `prometheus-data`. |
 | `grafana` | `grafana/grafana:13.3.0` | Provisioned Prometheus datasource and Multiserver overview dashboard; configuration and login database persist in `grafana-data`. |
+| `jaeger` | `jaegertracing/jaeger:2.22.0` | OTLP collector and trace UI with an in-memory limit of 10,000 traces; no persistent trace volume. |
 
-Healthchecks gate startup: the primary accepts commands, then the replica connects and finishes synchronization, then the three backends pass `/health`, then Prometheus and Grafana become healthy, and finally NGINX starts. The health endpoint is a liveness probe; it does not check Redis on each request.
+Healthchecks gate startup: backends wait for a healthy primary, a synchronized replica, and Jaeger. Prometheus waits for the three backends, Grafana waits for Prometheus, and NGINX waits for the apps and monitoring services. The backend health endpoint is a liveness probe; it does not check Redis on each request.
 
 ### Redis routing and durability
 
@@ -141,9 +149,21 @@ Routes are `/`, `/health`, `/store`, `/get`, `/slow`, `/metrics`, or `unmatched`
 
 The [Prometheus UI/API](https://localhost:8443/prometheus/) has no bearer-token guard. Grafana uses its own login and is independent of `AUTH_TOKEN`; enabling the backend token does not protect either monitoring UI. Both services stay on the internal network and are reached through NGINX's existing ports. Prometheus retains seven days of local history; ordinary `down` preserves both monitoring volumes. This is local demonstration storage, without external backups or alert delivery. The [provisioning files](monitoring/) are version controlled; dashboard edits belong in the JSON source.
 
-## Request correlation
+## Distributed tracing and request correlation
 
-NGINX generates a per-request `X-Request-Id` from `$request_id` and forwards it to the backend. The backend reads it, logs it (structured JSON via `log/slog`), and stamps it on the response. End-to-end tracing without external tooling.
+Open [Jaeger](https://localhost:8443/jaeger/) and select `multiserver-backend` to inspect an API request. NGINX's native OpenTelemetry module creates the proxy span, Go's `otelhttp` creates its child HTTP span, and `redisotel` records child `GET`, `SET`, or `INCR` spans. The backend resource identifies `service.name=multiserver-backend` and `service.instance.id=app1|app2|app3`; the proxy resource is `service.name=nginx`.
+
+![NGINX, Go, and Redis spans in Jaeger](report/screenshots/tracing_jaeger.png)
+
+W3C `traceparent` context propagates across the proxy and backend, preserving a valid client's trace ID. NGINX adds `X-Trace-Id` to traced API responses. Existing `X-Request-Id` headers and structured request logs remain available; the same ID appears as `request.id` on proxy, backend HTTP, and Redis spans. The [representative trace JSON](report/screenshots/trace_sample.json) shows the parent relationships without storing fixture keys or values.
+
+NGINX exports OTLP/gRPC to Jaeger on internal port `4317`. Each backend exports OTLP/HTTP using `OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318`, which sends spans to `/v1/traces`. Compose enables it on all three backends. For standalone local execution, leaving the variable unset or empty disables the Go SDK/exporter. Go uses parent-based sampling with new root requests sampled by default. Health probes, metrics scrapes, monitoring UI traffic, Redis startup/negotiation, and background counter collection are excluded from traces.
+
+NGINX resolves backend and monitoring UI addresses through Docker DNS every five seconds. A loopback-only gRPC relay forwards native trace exports through the same address refresh, so each exporter worker can keep a stable local connection when Jaeger's container address changes. The relay adds no published port or extra service.
+
+Backend spans use bounded HTTP routes and omit query strings, authorization headers, Redis keys/values, and database statements. The native NGINX exporter can include query text in its default `http.target` attribute before collection; Jaeger's collector removes `http.target`, `url.full`, `url.query`, `db.statement`, and `db.query.text` **before storage**. Those transport paths remain inside Compose's network.
+
+Trace export runs in the background, so a collector outage does not fail API requests; delivery can be lost during an outage. Shutdown drains HTTP work for up to twelve seconds, then allows up to two seconds to flush the SDK before Compose's fifteen-second grace period. Jaeger keeps at most **10,000 traces in memory**, not a fixed byte budget; a Jaeger restart discards them. Its UI/API has no authentication in this local configuration, and `AUTH_TOKEN` protects backend endpoints only.
 
 ---
 
@@ -164,6 +184,8 @@ Every backend API response carries:
 - `X-Server-Id: appN` — which replica handled it (stamped by backend; NGINX passes it through unchanged)
 - `X-Request-Id: <hex>` — generated by NGINX, echoed by the backend
 
+Traced API responses through NGINX additionally carry `X-Trace-Id: <32-char hex>`.
+
 NGINX-generated `429` responses contain JSON, `Retry-After`, and `X-Request-Id`; they have no backend identity because no backend served them.
 
 ---
@@ -178,7 +200,7 @@ NGINX-generated `429` responses contain JSON, `Retry-After`, and `X-Request-Id`;
 | Backend port leakage | Only `nginx` declares `ports:` (`8080:80` and `8443:443`). All other services live on Compose's internal network. |
 | Counter increments on the wrong endpoints | Only `GET /` mutates counters. `/health`, `/store`, `/get`, `/slow`, `/metrics` are counter-free. |
 | Three near-identical Docker images | One `build:` directive on `app1`; `app2` and `app3` reference `image: multiserver-app:local`. **One image, three replicas.** |
-| Slow startup | Multi-stage Docker build (Go 1.26-alpine builder → Alpine 3.20 runtime, ~34 MB). Healthcheck-gated dependencies; startup timing is recorded in the acceptance evidence. |
+| Slow startup | Multi-stage Docker build (Go 1.26-alpine builder → Alpine 3.20 runtime). Healthcheck-gated dependencies; startup timing is recorded in the acceptance evidence. |
 | Backend failure breaking client requests | NGINX `proxy_next_upstream error timeout http_502 http_503 http_504; proxy_next_upstream_tries 3` transparently retries on the next replica. Empirically: 20 of 20 requests succeed with one backend stopped. |
 
 ---
@@ -191,9 +213,10 @@ NGINX-generated `429` responses contain JSON, `Retry-After`, and `X-Request-Id`;
 | End-to-end smoke | `./scripts/test.sh` (stack up) | Exercises every endpoint through NGINX over HTTPS, with unique fixtures and bounded polling for replication. |
 | Redis recovery | `./scripts/test-redis.sh` (stack up, no other traffic) | 15 checks cover configuration, replication through every backend, stopped/paused readers, persistent primary restart/replacement, and recovery without backend restarts. |
 | Metrics | `python3 scripts/test-metrics.py` (stack up, Python 3) | Checks exposition, scrape targets, counter safety, authenticated scraping, Grafana provisioning, and finite results for every dashboard query. |
+| Tracing | `python3 scripts/test-tracing.py` (stack up, Python 3, no other traffic) | Verifies client → NGINX → Go → Redis parents, request/replica identity, primary/replica routing, malformed context, sensitive-data exclusion, and exact counter effects. |
 | Security | `./scripts/test-security.sh` (stack up, no other traffic) | Checks optional authentication, rejection without data changes, allowed bursts, JSON `429`, exact counter effects, and recovery. Set the same `AUTH_TOKEN` used to start the stack. |
 | Experiments | `./scripts/experiments.sh` (stack up, no other traffic) | Captures the five original behavior experiments plus Redis recovery as Experiment 6; Redis-check failures propagate through output capture. |
-| CI | Push to `main` or open a PR | Runs `go vet`, race tests, image build, HTTPS smoke, Redis recovery, security, and metrics/dashboard checks with authentication disabled and enabled; teardown runs even after failure. |
+| CI | Push to `main` or open a PR | Runs `go vet`, race tests, image build, HTTPS smoke, Redis recovery, security, metrics/dashboard, and live tracing checks with authentication disabled and enabled; teardown runs even after failure. |
 
 The smoke suite uses only HTTP(S) API calls and retains one small, unique `smoke-*` fixture per run because the API has no delete endpoint. Redis recovery and experiment scripts remove their own test keys and restore interrupted services; they never flush Redis or delete volumes.
 
@@ -209,6 +232,7 @@ Recorded [Experiment 6](report/screenshots/exp6_redis_persistence.txt) passed al
 │   ├── main.go                env wiring, Redis client init, server bootstrap
 │   ├── server.go              Server struct, handlers, middleware, typed response structs
 │   ├── metrics.go             request/duration metrics and bounded primary-counter collector
+│   ├── tracing.go             HTTP/Redis spans, OTLP exporter, request correlation
 │   ├── server_test.go         handler and middleware tests (miniredis-backed)
 │   ├── redis_routing_test.go  reader routing, errors, cancellation, deadlines
 │   ├── race_test.go           200-concurrent stress test for counter atomicity
@@ -216,18 +240,20 @@ Recorded [Experiment 6](report/screenshots/exp6_redis_persistence.txt) passed al
 │   ├── go.mod, go.sum
 │   └── .dockerignore
 ├── nginx/
-│   ├── default.conf           TLS termination, upstream pool, failover, request-id
+│   ├── nginx.conf             loads the native OpenTelemetry module
+│   ├── default.conf           TLS, failover, rate limit, trace propagation, UI routes
 │   └── certs/                 generated local certificate + key (gitignored)
-├── monitoring/                Prometheus scrape config, Grafana provisioning + dashboard JSON
+├── monitoring/                Prometheus/Grafana provisioning and Jaeger collector config
 ├── scripts/
 │   ├── gen-cert.sh            generates self-signed localhost TLS material
 │   ├── test.sh                end-to-end smoke (used by CI)
 │   ├── test-redis.sh          Redis replication, interruption, persistence checks
 │   ├── test-security.sh       optional auth, NGINX rate limits, recovery
 │   ├── test-metrics.py        scrape, counter, Grafana provisioning/query checks
+│   ├── test-tracing.py        real NGINX/Go/Redis trace tree and privacy checks
 │   └── experiments.sh         captures behavior experiments to text files
 ├── .github/workflows/ci.yml   CI pipeline
-└── docker-compose.yml         stack definition (8 services + 3 named volumes)
+└── docker-compose.yml         stack definition (9 default services + 3 named volumes)
 ```
 
 ---
@@ -235,12 +261,13 @@ Recorded [Experiment 6](report/screenshots/exp6_redis_persistence.txt) passed al
 ## Tech stack
 
 - **Backend:** Go (stdlib `net/http`), [`go-redis/v9`](https://github.com/redis/go-redis), `log/slog` for structured JSON logs
-- **Proxy:** [NGINX](https://nginx.org) 1.27 (alpine)
+- **Proxy:** [NGINX](https://nginx.org) 1.27.5 (alpine), native OpenTelemetry module
 - **Store:** [Redis](https://redis.io) 7 (alpine), AOF primary + asynchronous read replica
 - **Monitoring:** [Prometheus](https://prometheus.io) 3.15.1, [Grafana](https://grafana.com) 13.3.0, [`client_golang`](https://github.com/prometheus/client_golang)
-- **Runtime image:** Alpine 3.20, non-root `app` user, ~34 MB
+- **Tracing:** [OpenTelemetry](https://opentelemetry.io) Go HTTP/Redis instrumentation, [Jaeger](https://www.jaegertracing.io) 2.22.0
+- **Runtime image:** Alpine 3.20, non-root `app` user
 - **Orchestration:** Docker Compose (single `docker-compose.yml`, no overrides)
-- **Tests:** Go's `testing` + [`miniredis/v2`](https://github.com/alicebob/miniredis); Bash for smoke / experiment scripts; Python 3 standard library for monitoring integration
+- **Tests:** Go's `testing` + [`miniredis/v2`](https://github.com/alicebob/miniredis); Bash for smoke / experiment scripts; Python 3 standard library for monitoring and tracing integration
 - **CI:** GitHub Actions
 
 ---

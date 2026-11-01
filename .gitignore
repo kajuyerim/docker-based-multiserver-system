@@ -14,6 +14,7 @@ coverage.out
 coverage.html
 *.cover
 *.prof
+__pycache__/
 
 # --- Go workspace files (we use go.mod only) ---
 go.work
