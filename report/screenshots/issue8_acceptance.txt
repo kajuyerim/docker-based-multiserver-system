@@ -1,0 +1,62 @@
+Issue #8 local acceptance — 2026-11-01
+Rate-limit syntax and live burst check passed: 21 HTTP200,39 HTTP429 out of60; query variants share the same bucket.
+go vet and full race suite passed. Trusted local ShellCheck and Bash3.2 syntax checks passed.
+
+Authentication enabled
+PASS: expected missing/wrong credentials rejected on /health; observed JSON 401
+PASS: expected missing/wrong credentials rejected on /; observed JSON 401
+PASS: expected missing/wrong credentials rejected on /store; observed JSON 401
+PASS: expected missing/wrong credentials rejected on /get; observed JSON 401
+PASS: expected missing/wrong credentials rejected on /slow; observed JSON 401
+PASS: expected rejected requests to leave primary data/counter unchanged; observed no mutation
+PASS: expected configured credentials to permit /health; observed HTTP 200
+PASS: expected configured credentials to permit /; observed HTTP 200
+PASS: expected configured credentials to permit /store; observed HTTP 200
+PASS: expected configured credentials to permit /get; observed HTTP 200
+PASS: expected configured credentials to permit /slow; observed HTTP 200
+PASS: expected authenticated store/get to retain replica reads; observed exact fixture value
+PASS: expected burst of 20 simultaneous requests to pass; observed 20 HTTP 200 responses
+PASS: expected overload to return JSON 429 and Retry-After; observed 22 allowed, 78 limited, exact counter effect
+PASS: expected health/store/get/slow to remain available during root throttling; observed HTTP 200
+PASS: expected root limiter to recover after refill; observed HTTP 200
+ALL PASS: 16 security integration checks
+
+Authenticated smoke
+====== summary: 10 pass, 0 fail ======
+ALL PASS
+
+Authenticated Redis recovery
+PASS: expected six healthy services; observed redis, redis-replica, app1, app2, app3, nginx healthy
+PASS: expected AOF yes/everysec and named storage; observed /data=docker-based-multiserver-system_redis-data
+PASS: expected synchronized read-only replica, all backends using it, and only NGINX host ports; observed all checks pass
+PASS: expected initial marker on primary, replica, and HTTPS /get; observed initial on all three
+PASS: expected latest value through app1/app2/app3; observed updated via: app3 app2 app1 
+PASS: expected JSON 500 in under 5s; observed HTTP 500 in 1.795281s
+PASS: expected primary writes and increments during replica stop; observed stored=true global_count=345
+PASS: expected write made during stop to replicate after recovery; observed during-stop
+PASS: expected JSON 500 in under 5s; observed HTTP 500 in 2.011450s
+PASS: expected primary writes and increments during replica pause; observed stored=true global_count=346
+PASS: expected write made during pause to replicate after recovery; observed during-pause
+PASS: direct primary marker=updated restored; global_count continued 346 -> 347
+PASS: direct primary marker=updated restored; global_count continued 347 -> 348
+PASS: expected changed primary container and same volume; observed new ID with docker-based-multiserver-system_redis-data
+PASS: expected automatic reconnect without backend restarts; observed all backend IDs/start times unchanged and six healthy services
+ALL PASS: 15 Redis integration checks
+
+Authentication disabled
+PASS: expected empty AUTH_TOKEN to preserve access to every endpoint; observed HTTP 200
+PASS: expected configured credentials to permit /health; observed HTTP 200
+PASS: expected configured credentials to permit /; observed HTTP 200
+PASS: expected configured credentials to permit /store; observed HTTP 200
+PASS: expected configured credentials to permit /get; observed HTTP 200
+PASS: expected configured credentials to permit /slow; observed HTTP 200
+PASS: expected authenticated store/get to retain replica reads; observed exact fixture value
+PASS: expected burst of 20 simultaneous requests to pass; observed 20 HTTP 200 responses
+PASS: expected overload to return JSON 429 and Retry-After; observed 22 allowed, 78 limited, exact counter effect
+PASS: expected health/store/get/slow to remain available during root throttling; observed HTTP 200
+PASS: expected root limiter to recover after refill; observed HTTP 200
+ALL PASS: 11 security integration checks
+
+Default HTTPS smoke
+====== summary: 10 pass, 0 fail ======
+ALL PASS

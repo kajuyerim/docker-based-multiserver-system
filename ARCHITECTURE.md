@@ -517,5 +517,9 @@ debugging.
   window. Backups and off-host storage are not configured.
 - **Local TLS material.** Self-signed development certificates require
   a trusted replacement for production, with certificate renewal.
-- **No authentication or rate limiting.** The current endpoints are
-  suitable for a local demonstration; access controls are future work.
+- **Shared-token access control.** Optional bearer authentication protects
+  every backend endpoint, including health probes. All replicas share one
+  token; there is no user identity, role model, or managed token rotation.
+  NGINX limits only `/` to 10 requests/second per connection client IP,
+  burst 20, with immediate overflow rejection as JSON `429`. Other routes
+  remain unthrottled. Forwarded headers cannot select the rate-limit key.
