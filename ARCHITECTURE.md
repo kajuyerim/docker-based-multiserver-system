@@ -11,8 +11,9 @@ makes.
 
 A reverse-proxy load balancer (NGINX) fronts three identical stateless
 backend replicas (Go). All writes go to a persistent Redis primary;
-`/get` reads go to its read replica. These six services use Compose's
-internal network; only NGINX publishes host ports.
+`/get` reads go to its read replica. Prometheus scrapes each backend,
+and Grafana provides a provisioned dashboard. These eight services use
+Compose's internal network; only NGINX publishes host ports.
 
 ```mermaid
 flowchart LR
@@ -28,6 +29,12 @@ flowchart LR
     app3 --> reader
     redis -->|asynchronous replication| reader
     redis --- data[(redis-data volume<br/>AOF)]
+    nginx -->|/grafana/| grafana[Grafana]
+    nginx -->|/prometheus/| prometheus[Prometheus]
+    grafana -->|queries| prometheus
+    prometheus -. /metrics every 5s .-> app1
+    prometheus -. /metrics every 5s .-> app2
+    prometheus -. /metrics every 5s .-> app3
 ```
 
 The interesting questions are: why three replicas? why one proxy? why Redis
@@ -93,7 +100,8 @@ The primary serves `INCR` for `GET /` and `SET` for `/store`. It enables
 `appendonly yes` with `appendfsync everysec`; AOF files live at `/data`
 on the named `redis-data` volume. Normal restart, primary-container
 replacement, and full-stack `docker compose down` followed by `up`
-retain that volume. `docker compose down -v` deliberately deletes it.
+retain that volume. `docker compose down -v` deliberately deletes all
+three named volumes, including monitoring history and Grafana login state.
 Unidentified existing volumes are never adopted or pruned.
 
 The every-second fsync policy balances disk work against durability.
@@ -263,7 +271,7 @@ Option B is better because:
 
 1. **Build time.** One `go build` per code change, not three. CI is ~3×
    faster.
-2. **Image footprint.** One ~30 MB image on disk, not three.
+2. **Image footprint.** One ~34 MB image on disk, not three.
 3. **Configuration as data, not artifact.** Replica identity is just an
    env var; you can spin up `app4` without rebuilding anything. This is
    the [12-factor app](https://12factor.net/config) principle of
@@ -299,7 +307,7 @@ image:
 
 - Builder stage: `golang:1.26-alpine` → produces `/out/app`.
 - Runtime stage: `alpine:3.20` (~5 MB) + `wget` for the healthcheck +
-  the binary. Final image ~30 MB.
+  the binary. Final image ~34 MB.
 
 That's ~10× smaller, and it eliminates whole categories of CVEs by not
 including the compiler in production.
@@ -353,15 +361,19 @@ healthchecks are:
 - `redis-replica` → role is replica, primary link is up, and initial
   synchronization has finished. It starts after a healthy primary;
   backends wait for both Redis services.
-- `app1` / `app2` / `app3` → `wget --spider /health` (the HTTP server is
-  responding).
-- `nginx` → an HTTP `/health` request through the proxy succeeds.
+- `app1` / `app2` / `app3` → an authenticated `wget --spider /health`
+  request (the HTTP server is responding).
+- `prometheus` → its internal `/-/healthy` endpoint responds; startup waits
+  for all three backends.
+- `grafana` → its internal `/grafana/api/health` endpoint responds; startup
+  waits for Prometheus.
+- `nginx` → an authenticated HTTP `/health` request through the proxy succeeds.
 
-NGINX waits for all three apps to be healthy, then starts itself. The
-`docker compose up -d --wait --wait-timeout 90` command used in CI
-additionally waits for all six services to report healthy. Cached-image
-startup timing is recorded in the acceptance evidence; first-run image
-downloads depend on the network.
+NGINX waits for all three apps and both monitoring services to be healthy,
+then starts itself. The `docker compose up -d --wait --wait-timeout 90`
+command used in CI additionally waits for all eight services to report
+healthy. Earlier Redis acceptance timing is retained as historical evidence;
+first-run monitoring image downloads also depend on the network.
 
 These are startup gates, not ongoing dependency restarts. `/health`
 remains a process-liveness check and does not ping Redis. A later Redis
@@ -402,6 +414,74 @@ The only way to drop below 90% would be a more permissive fail interval
 (e.g., `max_fails=5 fail_timeout=60s` would let 5 failures slip through
 in each cycle), or a backend that fails *during* the response rather
 than at connect time (harder for NGINX to retry mid-stream).
+
+---
+
+## Per-replica metrics and a provisioned dashboard
+
+The backend exposes `/metrics` through `client_golang`, with an independent
+registry per `Server`. `AUTH_TOKEN` protects it just like the other backend
+endpoints. The metrics middleware wraps authentication, so rejected requests
+are measured as `401`; response-header middleware still supplies request and
+backend identity. A successful scrape sets the negotiated Prometheus
+exposition content type instead of the JSON API default.
+
+`multiserver_http_requests_total` and the
+`multiserver_http_request_duration_seconds` histogram label completed requests
+by `server_id`, `route`, and `status`. The route label has seven possible
+values: `/`, `/health`, `/store`, `/get`, `/slow`, `/metrics`, and `unmatched`.
+Query strings, Redis keys, arbitrary unmatched paths, request IDs, and tokens
+are excluded to keep the number of series bounded. The duration histogram
+covers ordinary fast handlers and the allowed ten-second `/slow` path.
+
+`multiserver_local_count` reads the existing atomic process counter, and
+`multiserver_in_flight_requests` reads the active-request gauge. The latter
+includes the current `/metrics` request, so an otherwise idle replica commonly
+reports one. Metrics scrapes can appear in HTTP request metrics but never
+increment either business counter.
+
+The shared counter collector performs a primary `GET global_count` with a
+500ms deadline. It does not issue `INCR` or read the replica. An absent key
+means zero; a primary read failure omits `multiserver_global_count` and emits
+`multiserver_global_count_scrape_success 0`. Successful reads emit the value
+and success `1`. This distinguishes an unavailable dependency from a reset
+counter while bounding scrape latency. The dashboard uses
+`max(multiserver_global_count)` across replicas: all three observe one Redis
+key, so summing them would triple the result. Scrapes are separate observations
+and can differ briefly as traffic arrives.
+
+Prometheus 3.15.1 scrapes all three internal `appN:8080/metrics` targets every
+five seconds, independently of NGINX's round-robin pool. On container startup,
+the configured `AUTH_TOKEN` is written with restrictive permissions to
+`/tmp/auth_token`; `authorization.credentials_file` reads that generated file.
+An empty token preserves unauthenticated local operation. No credential file
+is committed. The `prometheus-data` named volume holds time series, with a
+seven-day retention limit.
+
+Grafana 13.3.0 provisions the datasource UID `prometheus` at
+`http://prometheus:9090` and dashboard UID `multiserver` from files in
+[`monitoring/`](monitoring/). The dashboard defaults to the last fifteen
+minutes with five-second refreshes. It shows request rates per replica,
+p50/p95/p99 from histogram buckets, backend `4xx`/`5xx` error percentage,
+shared/local counters, active requests, and scrape health. Application panels
+exclude `/health` and `/metrics`. NGINX rejects `429` requests before backend
+instrumentation, so those responses are not included in these metrics.
+
+NGINX routes `/grafana/` and `/prometheus/` over its existing host ports;
+monitoring services publish no additional ports. The default dashboard URL is
+`https://localhost:8443/grafana/d/multiserver`, and the Prometheus UI/API is at
+`https://localhost:8443/prometheus/`. `GRAFANA_ROOT_URL` sets Grafana's canonical
+public URL. The local login is `admin` / `local-grafana-admin`; set
+`GRAFANA_ADMIN_PASSWORD` before first startup. Grafana stores the initialized
+account in the `grafana-data` database volume, so changing the environment
+variable later does not reset an existing password. Ordinary teardown retains
+both monitoring volumes.
+
+Backend bearer authentication does not guard the monitoring UIs. Grafana has
+its own login, and the Prometheus UI/API has no authentication in this local
+configuration. External access would require an appropriate access policy.
+Configuration stays reproducible through version-controlled provisioning;
+changes to the provisioned dashboard should be made in its JSON source.
 
 ---
 
@@ -457,6 +537,8 @@ they're checking:
 | `cd app && go test -race ./...` (stress) | Is concurrent access to counters race-free? | Counter implementation isn't atomic — lost updates under contention. |
 | `./scripts/test.sh` (smoke) | Does the full stack expose every endpoint correctly through NGINX? | Integration regression — Compose, NGINX config, or backend wiring is broken. |
 | `./scripts/test-redis.sh` (recovery) | Do real Redis replication, deadlines, persistence, and reconnection work? | Redis configuration, routing, or recovery regression. |
+| `./scripts/test-security.sh` (security) | Do optional authentication, NGINX bursts, and rate-limit recovery work without rejected-request mutations? | Authentication or proxy-policy regression. |
+| `python3 scripts/test-metrics.py` (monitoring) | Are all three scrapes healthy, counters unchanged by scrapes, and dashboard queries valid? | Instrumentation, credentials, provisioning, or query regression. |
 | `./scripts/experiments.sh` (evidence) | Does the stack exhibit the documented behaviors? | Captures behavior, including the Redis recovery gate as Experiment 6. |
 
 These remain four tiers: unit logic, concurrency, integration, and
@@ -464,8 +546,10 @@ behavior experiments. Two independent miniredis instances prove
 application routing without pretending to implement replication.
 Real Redis checks cover the behavior that a fake cannot prove.
 
-CI runs `go vet`, race tests, image build, HTTPS smoke, and the focused
-Redis recovery checks on pushes to `main` and pull requests. Failure
+CI runs `go vet`, race tests, image build, HTTPS smoke, focused Redis
+recovery, security, and metrics/dashboard checks on pushes to `main` and
+pull requests. Authentication-disabled and authentication-enabled runs
+exercise the optional credential path. Failure
 diagnostics include service states and recent logs; teardown always
 runs and retains named storage. Full behavior capture is local-only.
 
@@ -477,7 +561,7 @@ scripts remove only their own keys; they never flush Redis or remove
 volumes.
 
 The recovery script interrupts Redis and requires no other application
-traffic. Its 15 checks cover six-service readiness, persistence settings,
+traffic. Its 15 checks cover core-service readiness, persistence settings,
 replica read-only enforcement, updated values through all three
 backends, stopped/paused readers, and primary restart/replacement.
 Persistence assertions inspect the primary directly so the replica
@@ -493,8 +577,8 @@ container replacement. The [acceptance evidence](report/screenshots/issue6_accep
 records full-stack persistence, graceful shutdown, startup timing, and
 regression checks.
 
-Final acceptance completed a cached-image build and full-stack startup
-in 20 seconds. Ordinary teardown/startup retained the primary marker
+The earlier six-service Redis acceptance run completed a cached-image
+build and full-stack startup in 20 seconds. Ordinary teardown/startup retained the primary marker
 and counter (`210 → 211` on the next increment). With the read address
 empty, direct reads still succeeded while the replica was paused. A
 direct ten-second `/slow` request completed with HTTP `200` during
@@ -523,3 +607,8 @@ debugging.
   NGINX limits only `/` to 10 requests/second per connection client IP,
   burst 20, with immediate overflow rejection as JSON `429`. Other routes
   remain unthrottled. Forwarded headers cannot select the rate-limit key.
+
+- **Local monitoring.** Prometheus and Grafana each run as a single instance
+  with local named-volume storage. Prometheus keeps seven days; off-host
+  backups, remote storage, alert delivery, and a shared monitoring access
+  policy are not configured.
