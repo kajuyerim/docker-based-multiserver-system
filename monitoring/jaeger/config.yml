@@ -1,0 +1,47 @@
+extensions:
+  jaeger_storage:
+    backends:
+      memory_store:
+        memory:
+          max_traces: 10000
+  jaeger_query:
+    storage:
+      traces: memory_store
+    http:
+      endpoint: 0.0.0.0:16686
+    base_path: /jaeger
+  healthcheckv2:
+    use_v2: true
+    http:
+      endpoint: 0.0.0.0:13133
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  attributes/redact:
+    actions:
+      - {key: http.target, action: delete}
+      - {key: url.full, action: delete}
+      - {key: url.query, action: delete}
+      - {key: db.statement, action: delete}
+      - {key: db.query.text, action: delete}
+  batch:
+    timeout: 1s
+
+exporters:
+  jaeger_storage_exporter:
+    trace_storage: memory_store
+
+service:
+  extensions: [jaeger_storage, jaeger_query, healthcheckv2]
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [attributes/redact, batch]
+      exporters: [jaeger_storage_exporter]
