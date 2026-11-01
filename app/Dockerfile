@@ -43,6 +43,6 @@ EXPOSE 8080
 
 # Shell-form CMD so ${PORT:-8080} expands at runtime.
 HEALTHCHECK --interval=10s --timeout=3s --start-period=5s --retries=3 \
-    CMD wget --spider --quiet "http://localhost:${PORT:-8080}/health" || exit 1
+    CMD wget --spider --quiet --header="Authorization: Bearer ${AUTH_TOKEN:-}" "http://localhost:${PORT:-8080}/health" || exit 1
 
 ENTRYPOINT ["/usr/local/bin/app"]
