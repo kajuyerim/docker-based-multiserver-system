@@ -177,7 +177,10 @@ command -v docker >/dev/null || fail 'docker is required'
 command -v curl >/dev/null || fail 'curl is required'
 
 section 'Startup, durability, replication, and isolation'
-[ "$(docker compose config --services | wc -l | tr -d ' ')" -eq 6 ] || fail 'expected exactly six Compose services'
+configured_services=$(docker compose config --services)
+for service in "${services[@]}"; do
+    grep -qx "$service" <<< "$configured_services" || fail "missing required service $service"
+done
 wait_healthy "${services[@]}" || fail 'expected six healthy services within 30s'
 ok 'expected six healthy services; observed redis, redis-replica, app1, app2, app3, nginx healthy'
 docker compose exec -T redis sh -ec 'command -v timeout >/dev/null' || fail 'Redis image requires timeout for bounded checks'

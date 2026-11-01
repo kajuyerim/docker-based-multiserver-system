@@ -1,0 +1,112 @@
+Issue #1 local acceptance — 2026-11-01
+go vet and full race suite passed; existing 200-request counters remain exact.
+Promtool config and nginx syntax validation passed.
+Cached-image build and eight-service startup: 24.66 seconds
+Official Grafana renderer captured metrics_dashboard.png; all nine panels visually checked with data and no query errors.
+
+Metrics without auth after fresh startup
+PASS: metrics exposition is present and scrapes do not increment counters
+PASS: Prometheus successfully scrapes all three replicas
+PASS: query returns samples: multiserver_http_requests_total{route="/get",status="400"}
+PASS: query returns samples: multiserver_http_request_duration_seconds_count{route="/slow",status="200"}
+PASS: query returns samples: multiserver_local_count
+PASS: query returns samples: multiserver_in_flight_requests
+PASS: query returns samples: multiserver_global_count_scrape_success == 1
+PASS: global counter is exported by each replica
+PASS: dashboard query returns finite data: sum(up{job="multiserver"})
+PASS: Grafana datasource executes dashboard query: sum(up{job="multiserver"})
+PASS: dashboard query returns finite data: sum(rate(multiserver_http_requests_total{job="multiserver",route!~"/health|/metrics"}[1m])) or vector(0)
+PASS: Grafana datasource executes dashboard query: sum(rate(multiserver_http_requests_total{job="multiserver",route!~"/health|/metrics"}[1m])) or vector(0)
+PASS: dashboard query returns finite data: 100 * (sum(rate(multiserver_http_requests_total{job="multiserver",route!~"/health|/metrics",status=~"[45].."}[1m])) or vector(0)) / clamp_min((sum(rate(multiserver_http_requests_total{job="multiserver",route!~"/health|/metrics"}[1m])) or vector(0)), 0.000001)
+PASS: Grafana datasource executes dashboard query: 100 * (sum(rate(multiserver_http_requests_total{job="multiserver",route!~"/health|/metrics",status=~"[45].."}[1m])) or vector(0)) / clamp_min((sum(rate(multiserver_http_requests_total{job="multiserver",route!~"/health|/metrics"}[1m])) or vector(0)), 0.000001)
+PASS: dashboard query returns finite data: max(multiserver_global_count{job="multiserver"})
+PASS: Grafana datasource executes dashboard query: max(multiserver_global_count{job="multiserver"})
+PASS: dashboard query returns finite data: sum by (server_id) (rate(multiserver_http_requests_total{job="multiserver",route!~"/health|/metrics"}[1m]))
+PASS: Grafana datasource executes dashboard query: sum by (server_id) (rate(multiserver_http_requests_total{job="multiserver",route!~"/health|/metrics"}[1m]))
+PASS: dashboard query returns finite data: histogram_quantile(0.5, sum by (le) (rate(multiserver_http_request_duration_seconds_bucket{job="multiserver",route!~"/health|/metrics"}[1m])))
+PASS: Grafana datasource executes dashboard query: histogram_quantile(0.5, sum by (le) (rate(multiserver_http_request_duration_seconds_bucket{job="multiserver",route!~"/health|/metrics"}[1m])))
+PASS: dashboard query returns finite data: histogram_quantile(0.95, sum by (le) (rate(multiserver_http_request_duration_seconds_bucket{job="multiserver",route!~"/health|/metrics"}[1m])))
+PASS: Grafana datasource executes dashboard query: histogram_quantile(0.95, sum by (le) (rate(multiserver_http_request_duration_seconds_bucket{job="multiserver",route!~"/health|/metrics"}[1m])))
+PASS: dashboard query returns finite data: histogram_quantile(0.99, sum by (le) (rate(multiserver_http_request_duration_seconds_bucket{job="multiserver",route!~"/health|/metrics"}[1m])))
+PASS: Grafana datasource executes dashboard query: histogram_quantile(0.99, sum by (le) (rate(multiserver_http_request_duration_seconds_bucket{job="multiserver",route!~"/health|/metrics"}[1m])))
+PASS: dashboard query returns finite data: multiserver_local_count{job="multiserver"}
+PASS: Grafana datasource executes dashboard query: multiserver_local_count{job="multiserver"}
+PASS: dashboard query returns finite data: multiserver_in_flight_requests{job="multiserver"}
+PASS: Grafana datasource executes dashboard query: multiserver_in_flight_requests{job="multiserver"}
+PASS: dashboard query returns finite data: max(multiserver_global_count{job="multiserver"})
+PASS: Grafana datasource executes dashboard query: max(multiserver_global_count{job="multiserver"})
+ALL PASS: metrics, scrape targets, primary counter safety, Grafana provisioning, and dashboard queries
+
+Metrics with auth
+PASS: metrics exposition is present and scrapes do not increment counters
+PASS: Prometheus successfully scrapes all three replicas
+PASS: query returns samples: multiserver_http_requests_total{route="/get",status="400"}
+PASS: query returns samples: multiserver_http_request_duration_seconds_count{route="/slow",status="200"}
+PASS: query returns samples: multiserver_local_count
+PASS: query returns samples: multiserver_in_flight_requests
+PASS: query returns samples: multiserver_global_count_scrape_success == 1
+PASS: global counter is exported by each replica
+PASS: dashboard query returns finite data: sum(up{job="multiserver"})
+PASS: Grafana datasource executes dashboard query: sum(up{job="multiserver"})
+PASS: dashboard query returns finite data: sum(rate(multiserver_http_requests_total{job="multiserver",route!~"/health|/metrics"}[1m])) or vector(0)
+PASS: Grafana datasource executes dashboard query: sum(rate(multiserver_http_requests_total{job="multiserver",route!~"/health|/metrics"}[1m])) or vector(0)
+PASS: dashboard query returns finite data: 100 * (sum(rate(multiserver_http_requests_total{job="multiserver",route!~"/health|/metrics",status=~"[45].."}[1m])) or vector(0)) / clamp_min((sum(rate(multiserver_http_requests_total{job="multiserver",route!~"/health|/metrics"}[1m])) or vector(0)), 0.000001)
+PASS: Grafana datasource executes dashboard query: 100 * (sum(rate(multiserver_http_requests_total{job="multiserver",route!~"/health|/metrics",status=~"[45].."}[1m])) or vector(0)) / clamp_min((sum(rate(multiserver_http_requests_total{job="multiserver",route!~"/health|/metrics"}[1m])) or vector(0)), 0.000001)
+PASS: dashboard query returns finite data: max(multiserver_global_count{job="multiserver"})
+PASS: Grafana datasource executes dashboard query: max(multiserver_global_count{job="multiserver"})
+PASS: dashboard query returns finite data: sum by (server_id) (rate(multiserver_http_requests_total{job="multiserver",route!~"/health|/metrics"}[1m]))
+PASS: Grafana datasource executes dashboard query: sum by (server_id) (rate(multiserver_http_requests_total{job="multiserver",route!~"/health|/metrics"}[1m]))
+PASS: dashboard query returns finite data: histogram_quantile(0.5, sum by (le) (rate(multiserver_http_request_duration_seconds_bucket{job="multiserver",route!~"/health|/metrics"}[1m])))
+PASS: Grafana datasource executes dashboard query: histogram_quantile(0.5, sum by (le) (rate(multiserver_http_request_duration_seconds_bucket{job="multiserver",route!~"/health|/metrics"}[1m])))
+PASS: dashboard query returns finite data: histogram_quantile(0.95, sum by (le) (rate(multiserver_http_request_duration_seconds_bucket{job="multiserver",route!~"/health|/metrics"}[1m])))
+PASS: Grafana datasource executes dashboard query: histogram_quantile(0.95, sum by (le) (rate(multiserver_http_request_duration_seconds_bucket{job="multiserver",route!~"/health|/metrics"}[1m])))
+PASS: dashboard query returns finite data: histogram_quantile(0.99, sum by (le) (rate(multiserver_http_request_duration_seconds_bucket{job="multiserver",route!~"/health|/metrics"}[1m])))
+PASS: Grafana datasource executes dashboard query: histogram_quantile(0.99, sum by (le) (rate(multiserver_http_request_duration_seconds_bucket{job="multiserver",route!~"/health|/metrics"}[1m])))
+PASS: dashboard query returns finite data: multiserver_local_count{job="multiserver"}
+PASS: Grafana datasource executes dashboard query: multiserver_local_count{job="multiserver"}
+PASS: dashboard query returns finite data: multiserver_in_flight_requests{job="multiserver"}
+PASS: Grafana datasource executes dashboard query: multiserver_in_flight_requests{job="multiserver"}
+PASS: dashboard query returns finite data: max(multiserver_global_count{job="multiserver"})
+PASS: Grafana datasource executes dashboard query: max(multiserver_global_count{job="multiserver"})
+ALL PASS: metrics, scrape targets, primary counter safety, Grafana provisioning, and dashboard queries
+
+Security with monitoring
+PASS: expected missing/wrong credentials rejected on /health; observed JSON 401
+PASS: expected missing/wrong credentials rejected on /; observed JSON 401
+PASS: expected missing/wrong credentials rejected on /store; observed JSON 401
+PASS: expected missing/wrong credentials rejected on /get; observed JSON 401
+PASS: expected missing/wrong credentials rejected on /slow; observed JSON 401
+PASS: expected rejected requests to leave primary data/counter unchanged; observed no mutation
+PASS: expected configured credentials to permit /health; observed HTTP 200
+PASS: expected configured credentials to permit /; observed HTTP 200
+PASS: expected configured credentials to permit /store; observed HTTP 200
+PASS: expected configured credentials to permit /get; observed HTTP 200
+PASS: expected configured credentials to permit /slow; observed HTTP 200
+PASS: expected authenticated store/get to retain replica reads; observed exact fixture value
+PASS: expected burst of 20 simultaneous requests to pass; observed 20 HTTP 200 responses
+PASS: expected overload to return JSON 429 and Retry-After; observed 22 allowed, 78 limited, exact counter effect
+PASS: expected health/store/get/slow to remain available during root throttling; observed HTTP 200
+PASS: expected root limiter to recover after refill; observed HTTP 200
+ALL PASS: 16 security integration checks
+
+HTTPS smoke with monitoring
+====== summary: 10 pass, 0 fail ======
+ALL PASS
+
+Redis recovery with monitoring
+PASS: expected six healthy services; observed redis, redis-replica, app1, app2, app3, nginx healthy
+PASS: expected AOF yes/everysec and named storage; observed /data=docker-based-multiserver-system_redis-data
+PASS: expected synchronized read-only replica, all backends using it, and only NGINX host ports; observed all checks pass
+PASS: expected initial marker on primary, replica, and HTTPS /get; observed initial on all three
+PASS: expected latest value through app1/app2/app3; observed updated via: app1 app2 app3
+PASS: expected JSON 500 in under 5s; observed HTTP 500 in 1.785128s
+PASS: expected primary writes and increments during replica stop; observed stored=true global_count=502
+PASS: expected write made during stop to replicate after recovery; observed during-stop
+PASS: expected JSON 500 in under 5s; observed HTTP 500 in 2.011572s
+PASS: expected primary writes and increments during replica pause; observed stored=true global_count=503
+PASS: expected write made during pause to replicate after recovery; observed during-pause
+PASS: direct primary marker=updated restored; global_count continued 503 -> 504
+PASS: direct primary marker=updated restored; global_count continued 504 -> 505
+PASS: expected changed primary container and same volume; observed new ID with docker-based-multiserver-system_redis-data
+PASS: expected automatic reconnect without backend restarts; observed all backend IDs/start times unchanged and six healthy services
+ALL PASS: 15 Redis integration checks
