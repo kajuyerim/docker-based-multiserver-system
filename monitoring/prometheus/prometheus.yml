@@ -1,0 +1,16 @@
+global:
+  scrape_interval: 5s
+  scrape_timeout: 3s
+  evaluation_interval: 5s
+
+scrape_configs:
+  - job_name: multiserver
+    metrics_path: /metrics
+    authorization:
+      type: Bearer
+      credentials_file: /tmp/auth_token
+    static_configs:
+      - targets:
+          - app1:8080
+          - app2:8080
+          - app3:8080
