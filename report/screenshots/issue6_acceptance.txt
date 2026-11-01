@@ -1,0 +1,19 @@
+Issue #6 final acceptance
+Date: 2026-11-01 13:44:18 +03
+Target: local Compose stack; HTTPS https://localhost:8443
+
+--- Empty REDIS_READ_ADDR compatibility ---
+PASS: empty REDIS_READ_ADDR resolved to redis:6379; direct store/get returned primary-only-ok with replica paused; no host ports
+
+--- Full-stack restart preserves named Redis storage ---
+PASS: ordinary down/up retained primary marker and counter; next API increment 210 -> 211
+PASS: cached-image startup including build completed in 20 seconds; six healthy services; same named storage volume docker-based-multiserver-system_redis-data
+PASS: replica-backed HTTPS /get returned retained marker after full-stack restart
+
+--- Direct in-flight graceful shutdown ---
+PASS: tagged direct app2 -> app1 request completed HTTP 200/slept=10 during SIGTERM; stop drained in 11 seconds; app1 exit=0
+{"time":"2026-11-01T10:44:43.01946568Z","level":"INFO","msg":"shutdown initiated","server_id":"app1","in_flight":1}
+{"time":"2026-11-01T10:44:53.130196427Z","level":"INFO","msg":"shutdown complete","server_id":"app1"}
+
+ALL PASS: primary-only compatibility, full-stack persistence, cached startup budget, and graceful shutdown
+PASS: cleanup removed only owned container and test keys; all six services healthy

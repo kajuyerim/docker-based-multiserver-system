@@ -1,9 +1,9 @@
 === Experiment 1: Load distribution (30 requests through nginx) ===
-2026-05-17 01:10:08
-Target: http://localhost:8080
+2026-11-01 13:39:12
+Target: https://localhost:8443
 
 Expectation: nginx default round-robin gives ~10 hits per replica.
 
-   9 X-Server-Id: app1
-  11 X-Server-Id: app2
-  10 X-Server-Id: app3
+  10 X-Server-Id: app1
+   9 X-Server-Id: app2
+  11 X-Server-Id: app3
