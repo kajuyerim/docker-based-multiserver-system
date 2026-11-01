@@ -1,0 +1,15 @@
+
+Environment and measurement boundary
+UTC: 2026-11-01T12:12:54Z
+Profile: full
+Run ID: 5277a2e96da404c06cf60e65
+Workload revision: fc72811
+Generator: grafana/k6:2.3.0, same Compose network, HTTPS through NGINX, development TLS verification disabled.
+Application: three backends, Redis primary/replica, metrics and tracing enabled, root limit 10 requests/sec per source IP.
+Authentication: disabled for this local run.
+Darwin arm64
+go version go1.26.3 darwin/arm64
+Docker CPUs=15 memory_bytes=12598730752
+SHA256 bench/load.js 3e83351c9e10b08147356a5d55fae29e21811811fe23c911f37cb835dc796520
+SHA256 app/benchmark_test.go d694645d10a971fbfd9d77e9fda71f19b96925c38e04216404a3d0d5f44b1bff
+Cleanup: removed 100 run-owned keys; existing data and volumes retained.

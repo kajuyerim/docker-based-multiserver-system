@@ -75,7 +75,7 @@ flowchart LR
     app3 -. OTLP HTTP :4318 .-> jaeger
 ```
 
-Nine default services, orchestrated by a single `docker-compose.yml` (the optional screenshot renderer adds a tenth):
+Nine default services, orchestrated by a single `docker-compose.yml`. Screenshot rendering and load generation use optional profiles:
 
 | Service | Image | Role |
 |---------|-------|------|
@@ -215,12 +215,48 @@ NGINX-generated `429` responses contain JSON, `Retry-After`, and `X-Request-Id`;
 | Metrics | `python3 scripts/test-metrics.py` (stack up, Python 3) | Checks exposition, scrape targets, counter safety, authenticated scraping, Grafana provisioning, and finite results for every dashboard query. |
 | Tracing | `python3 scripts/test-tracing.py` (stack up, Python 3, no other traffic) | Verifies client → NGINX → Go → Redis parents, request/replica identity, primary/replica routing, malformed context, sensitive-data exclusion, and exact counter effects. |
 | Security | `./scripts/test-security.sh` (stack up, no other traffic) | Checks optional authentication, rejection without data changes, allowed bursts, JSON `429`, exact counter effects, and recovery. Set the same `AUTH_TOKEN` used to start the stack. |
+| Load | `./scripts/run-load.sh` (stack up, no other traffic) | Runs Go microbenchmarks and the complete 1/10/50/100-VU HTTPS profile; validates exact replica reads and reports accepted traffic separately from expected root `429` responses. |
+| Load runner smoke | `./scripts/run-load.sh --smoke` | Exercises the same workload with short stages and temporary evidence; does not replace the full performance run. |
 | Experiments | `./scripts/experiments.sh` (stack up, no other traffic) | Captures the five original behavior experiments plus Redis recovery as Experiment 6; Redis-check failures propagate through output capture. |
-| CI | Push to `main` or open a PR | Runs `go vet`, race tests, image build, HTTPS smoke, Redis recovery, security, metrics/dashboard, and live tracing checks with authentication disabled and enabled; teardown runs even after failure. |
+| CI | Push to `main` or open a PR | Runs `go vet`, race tests, image build, HTTPS smoke, Redis recovery, security, metrics/dashboard, live tracing, Go benchmarks, and the full load profile. Uploads fresh performance evidence; teardown runs even after failure. |
 
 The smoke suite uses only HTTP(S) API calls and retains one small, unique `smoke-*` fixture per run because the API has no delete endpoint. Redis recovery and experiment scripts remove their own test keys and restore interrupted services; they never flush Redis or delete volumes.
 
 Recorded [Experiment 6](report/screenshots/exp6_redis_persistence.txt) passed all 15 checks. Reads returned JSON `500` in 1.82 seconds with the replica stopped and 2.01 seconds with it paused. The primary counter continued `176 → 177` after restart and `177 → 178` after replacement; backend IDs and start times stayed unchanged. [Final acceptance](report/screenshots/issue6_acceptance.txt) also verified primary-only configuration, data surviving full-stack teardown/startup, and a direct ten-second request completing during SIGTERM.
+
+---
+
+## Performance
+
+With the stack running, use the same `AUTH_TOKEN` that configured the backends and keep other application traffic stopped:
+
+```bash
+./scripts/run-load.sh         # full profile and three Go benchmark repetitions
+./scripts/run-load.sh --smoke # short workload validation; temporary results only
+```
+
+The optional `load` profile runs the official `grafana/k6:2.3.0` image on Compose's network, through NGINX over HTTPS. The full schedule is **265 seconds**: five-second ramps into **1, 10, 50, and 100 virtual users**, sixty seconds at each level, then a five-second ramp down. Completion grace can extend wall time. Each iteration requests `/`, stores a fresh value under its run-owned key, polls `/get` for that exact replica value for up to ten seconds, then pauses for **0.1 seconds**. The smoke schedule is thirteen seconds and writes only temporary evidence.
+
+NGINX's root limit remains enabled. All users share the generator's client IP, so valid JSON `429` responses are expected under load and reported separately from accepted HTTP `200` throughput. The report shows accepted-only and all-traffic latency percentiles; steady-stage rates count requests started within each full sixty-second window and exclude ramps. Replica lag can produce additional GET polls. Functional failures, unexpected responses, incomplete iterations, or a missing steady stage fail the run; latency figures are observations without a configured performance SLO.
+
+The generator, nine services, metrics, and tracing share one Docker host. TLS is enabled with development certificate verification disabled. Reported request latency measures HTTP send/wait/receive time; connection and TLS setup are separate built-in k6 metrics. These results describe this workload and machine, with telemetry enabled; they do not establish a deployment capacity limit.
+
+Full runs write `report/screenshots/load_results.txt` and raw JSON, console, environment, and benchmark files under `report/screenshots/load/`. `LOAD_RESULTS_DIR` selects another output directory. Cleanup removes only run-owned keys and the temporary generator; existing counters, data, and volumes remain. CI runs the full profile with authentication enabled and always uploads only that run's fresh temporary results directory.
+
+`BenchmarkHandleRoot` includes a fresh response recorder, JSON encoding, atomic local counting, and a loopback miniredis TCP `INCR`; it excludes HTTP transport, middleware, TLS, NGINX, and real Redis disk work. `BenchmarkClampSlowSeconds` cycles boundary and interior inputs. Both report allocations; the full runner collects three one-second repetitions before k6.
+
+Measured on **2026-11-01**, Apple M5 Pro, Go 1.26.3, with Docker allocated 15 CPUs and 12.6 GB memory. Authentication was disabled for this local run. Each row covers its full sixty-second steady window:
+
+| Virtual users | Accepted HTTP 200 req/s | Accepted p50 / p95 / p99 (ms) | Root attempts rejected as 429 |
+|---------------|-------------------------|------------------------------|-------------------------------|
+| 1 | 27.70 | 1.19 / 2.09 / 2.44 | 0.00% |
+| 10 | 193.77 | 1.90 / 4.52 / 8.98 | 89.12% |
+| 50 | 939.90 | 1.27 / 6.44 / 10.30 | 97.85% |
+| 100 | **1,921.40** | **0.67 / 2.56 / 4.96** | 98.95% |
+
+The 265.06-second run completed **98,809 iterations and 296,431 requests**, including 200,195 accepted responses and 96,236 expected root rejections, with **zero unexpected errors or consistency failures**. Accepted traffic is mostly store/read work at higher concurrency because the root remains capped at 10 requests/second. The three direct-handler benchmark repetitions measured 22.95–23.36 μs/op, 696–697 B/op, and 23–24 allocations/op; the clamp measured 1.627–1.633 ns/op with zero allocations.
+
+See the [validated report](report/screenshots/load_results.txt), [raw k6 metrics](report/screenshots/load/load_summary.json), [environment](report/screenshots/load/environment.txt), and [Go benchmark output](report/screenshots/load/go_benchmarks.txt). CI artifacts provide separate measurements from the hosted runner.
 
 ---
 
@@ -236,6 +272,7 @@ Recorded [Experiment 6](report/screenshots/exp6_redis_persistence.txt) passed al
 │   ├── server_test.go         handler and middleware tests (miniredis-backed)
 │   ├── redis_routing_test.go  reader routing, errors, cancellation, deadlines
 │   ├── race_test.go           200-concurrent stress test for counter atomicity
+│   ├── benchmark_test.go      direct root-handler and clamp microbenchmarks
 │   ├── Dockerfile             multi-stage, alpine runtime, non-root user
 │   ├── go.mod, go.sum
 │   └── .dockerignore
@@ -244,6 +281,7 @@ Recorded [Experiment 6](report/screenshots/exp6_redis_persistence.txt) passed al
 │   ├── default.conf           TLS, failover, rate limit, trace propagation, UI routes
 │   └── certs/                 generated local certificate + key (gitignored)
 ├── monitoring/                Prometheus/Grafana provisioning and Jaeger collector config
+├── bench/load.js              k6 mixed HTTPS workload and machine-readable summary
 ├── scripts/
 │   ├── gen-cert.sh            generates self-signed localhost TLS material
 │   ├── test.sh                end-to-end smoke (used by CI)
@@ -251,6 +289,8 @@ Recorded [Experiment 6](report/screenshots/exp6_redis_persistence.txt) passed al
 │   ├── test-security.sh       optional auth, NGINX rate limits, recovery
 │   ├── test-metrics.py        scrape, counter, Grafana provisioning/query checks
 │   ├── test-tracing.py        real NGINX/Go/Redis trace tree and privacy checks
+│   ├── run-load.sh            isolated benchmarks, k6 runner, evidence, owned-key cleanup
+│   ├── summarize-load.py      validates complete load evidence and separates accepted traffic
 │   └── experiments.sh         captures behavior experiments to text files
 ├── .github/workflows/ci.yml   CI pipeline
 └── docker-compose.yml         stack definition (9 default services + 3 named volumes)
@@ -267,7 +307,7 @@ Recorded [Experiment 6](report/screenshots/exp6_redis_persistence.txt) passed al
 - **Tracing:** [OpenTelemetry](https://opentelemetry.io) Go HTTP/Redis instrumentation, [Jaeger](https://www.jaegertracing.io) 2.22.0
 - **Runtime image:** Alpine 3.20, non-root `app` user
 - **Orchestration:** Docker Compose (single `docker-compose.yml`, no overrides)
-- **Tests:** Go's `testing` + [`miniredis/v2`](https://github.com/alicebob/miniredis); Bash for smoke / experiment scripts; Python 3 standard library for monitoring and tracing integration
+- **Tests:** Go's `testing` + [`miniredis/v2`](https://github.com/alicebob/miniredis); k6 2.3.0 for HTTPS load; Bash runners; Python 3 standard library for monitoring, tracing, and load-result validation
 - **CI:** GitHub Actions
 
 ---
