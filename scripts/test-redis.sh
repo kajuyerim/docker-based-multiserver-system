@@ -3,7 +3,11 @@
 # Run against this Compose stack without other application traffic.
 set -euo pipefail
 
-cd "$(dirname "$0")/.."
+script_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=lib/http.sh
+source "$script_dir/lib/http.sh"
+cd "$script_dir/.."
 BASE_URL="${BASE_URL:-https://localhost:8443}"
 BASE_URL="${BASE_URL%/}"
 case "$BASE_URL" in
@@ -92,7 +96,7 @@ trap 'exit 143' TERM
 request() {
     local metadata
     CURL_OK=1
-    if ! metadata=$(curl ${tls_flag:+"$tls_flag"} -sS --max-time "$2" \
+    if ! metadata=$(http_curl ${tls_flag:+"$tls_flag"} -sS --max-time "$2" \
         -D "$workdir/headers" -o "$workdir/body" \
         -w '%{http_code} %{time_total}' "$BASE_URL$1" 2>"$workdir/curl-error"); then
         CURL_OK=0
