@@ -1,0 +1,134 @@
+Issue #2 local acceptance — 2026-11-01
+go vet and full race suite passed, including isolated SDK providers, actual OTLP/HTTP protobuf export, W3C context, Redis child spans, sensitive-data exclusion, and bounded flush failure.
+NGINX syntax and actual Jaeger readiness passed. Native proxy span and external-parent relationship verified.
+Cached-image build and nine-service startup: 24.93 seconds
+Backend image size:48,657,514 bytes. Official renderer captured the actual three-span Jaeger UI; screenshot visually checked.
+
+Tracing after final nine-service startup
+PASS: expected client -> NGINX -> Go -> Redis SET for GET /store; observed matching parents, request IDs, and replica identity
+PASS: expected client -> NGINX -> Go -> Redis GET for GET /get; observed matching parents, request IDs, and replica identity
+PASS: expected exact write/read through primary/replica; observed SET on redis and GET on redis-replica
+PASS: expected client -> NGINX -> Go for GET /slow; observed matching parents, request IDs, and replica identity
+PASS: expected malformed traceparent to start a fresh trace; observed valid replacement and normal HTTP 200
+PASS: expected tracing and non-root routes to preserve business counters; observed unchanged primary counter
+PASS: expected client -> NGINX -> Go -> Redis INCR for GET /; observed matching parents, request IDs, and replica identity
+PASS: expected one traced root INCR; observed exact counter increment
+ALL PASS: real NGINX/Go/Redis propagation, replica routing, correlation, malformed context, privacy, and counter safety
+
+Tracing with authentication
+PASS: expected client -> NGINX -> Go -> Redis SET for GET /store; observed matching parents, request IDs, and replica identity
+PASS: expected client -> NGINX -> Go -> Redis GET for GET /get; observed matching parents, request IDs, and replica identity
+PASS: expected exact write/read through primary/replica; observed SET on redis and GET on redis-replica
+PASS: expected client -> NGINX -> Go for GET /slow; observed matching parents, request IDs, and replica identity
+PASS: expected malformed traceparent to start a fresh trace; observed valid replacement and normal HTTP 200
+PASS: expected tracing and non-root routes to preserve business counters; observed unchanged primary counter
+PASS: expected client -> NGINX -> Go -> Redis INCR for GET /; observed matching parents, request IDs, and replica identity
+PASS: expected one traced root INCR; observed exact counter increment
+ALL PASS: real NGINX/Go/Redis propagation, replica routing, correlation, malformed context, privacy, and counter safety
+
+Real Grafana datasource and Prometheus queries
+PASS: metrics exposition is present and scrapes do not increment counters
+PASS: Prometheus successfully scrapes all three replicas
+PASS: query returns samples: multiserver_http_requests_total{route="/get",status="400"}
+PASS: query returns samples: multiserver_http_request_duration_seconds_count{route="/slow",status="200"}
+PASS: query returns samples: multiserver_local_count
+PASS: query returns samples: multiserver_in_flight_requests
+PASS: query returns samples: multiserver_global_count_scrape_success == 1
+PASS: global counter is exported by each replica
+PASS: dashboard query returns finite data: sum(up{job="multiserver"})
+PASS: Grafana datasource executes dashboard query: sum(up{job="multiserver"})
+PASS: dashboard query returns finite data: sum(rate(multiserver_http_requests_total{job="multiserver",route!~"/health|/metrics"}[1m])) or vector(0)
+PASS: Grafana datasource executes dashboard query: sum(rate(multiserver_http_requests_total{job="multiserver",route!~"/health|/metrics"}[1m])) or vector(0)
+PASS: dashboard query returns finite data: 100 * (sum(rate(multiserver_http_requests_total{job="multiserver",route!~"/health|/metrics",status=~"[45].."}[1m])) or vector(0)) / clamp_min((sum(rate(multiserver_http_requests_total{job="multiserver",route!~"/health|/metrics"}[1m])) or vector(0)), 0.000001)
+PASS: Grafana datasource executes dashboard query: 100 * (sum(rate(multiserver_http_requests_total{job="multiserver",route!~"/health|/metrics",status=~"[45].."}[1m])) or vector(0)) / clamp_min((sum(rate(multiserver_http_requests_total{job="multiserver",route!~"/health|/metrics"}[1m])) or vector(0)), 0.000001)
+PASS: dashboard query returns finite data: max(multiserver_global_count{job="multiserver"})
+PASS: Grafana datasource executes dashboard query: max(multiserver_global_count{job="multiserver"})
+PASS: dashboard query returns finite data: sum by (server_id) (rate(multiserver_http_requests_total{job="multiserver",route!~"/health|/metrics"}[1m]))
+PASS: Grafana datasource executes dashboard query: sum by (server_id) (rate(multiserver_http_requests_total{job="multiserver",route!~"/health|/metrics"}[1m]))
+PASS: dashboard query returns finite data: histogram_quantile(0.5, sum by (le) (rate(multiserver_http_request_duration_seconds_bucket{job="multiserver",route!~"/health|/metrics"}[1m])))
+PASS: Grafana datasource executes dashboard query: histogram_quantile(0.5, sum by (le) (rate(multiserver_http_request_duration_seconds_bucket{job="multiserver",route!~"/health|/metrics"}[1m])))
+PASS: dashboard query returns finite data: histogram_quantile(0.95, sum by (le) (rate(multiserver_http_request_duration_seconds_bucket{job="multiserver",route!~"/health|/metrics"}[1m])))
+PASS: Grafana datasource executes dashboard query: histogram_quantile(0.95, sum by (le) (rate(multiserver_http_request_duration_seconds_bucket{job="multiserver",route!~"/health|/metrics"}[1m])))
+PASS: dashboard query returns finite data: histogram_quantile(0.99, sum by (le) (rate(multiserver_http_request_duration_seconds_bucket{job="multiserver",route!~"/health|/metrics"}[1m])))
+PASS: Grafana datasource executes dashboard query: histogram_quantile(0.99, sum by (le) (rate(multiserver_http_request_duration_seconds_bucket{job="multiserver",route!~"/health|/metrics"}[1m])))
+PASS: dashboard query returns finite data: multiserver_local_count{job="multiserver"}
+PASS: Grafana datasource executes dashboard query: multiserver_local_count{job="multiserver"}
+PASS: dashboard query returns finite data: multiserver_in_flight_requests{job="multiserver"}
+PASS: Grafana datasource executes dashboard query: multiserver_in_flight_requests{job="multiserver"}
+PASS: dashboard query returns finite data: max(multiserver_global_count{job="multiserver"})
+PASS: Grafana datasource executes dashboard query: max(multiserver_global_count{job="multiserver"})
+ALL PASS: metrics, scrape targets, primary counter safety, Grafana provisioning, and dashboard queries
+
+Authenticated security
+PASS: expected missing/wrong credentials rejected on /health; observed JSON 401
+PASS: expected missing/wrong credentials rejected on /; observed JSON 401
+PASS: expected missing/wrong credentials rejected on /store; observed JSON 401
+PASS: expected missing/wrong credentials rejected on /get; observed JSON 401
+PASS: expected missing/wrong credentials rejected on /slow; observed JSON 401
+PASS: expected rejected requests to leave primary data/counter unchanged; observed no mutation
+PASS: expected configured credentials to permit /health; observed HTTP 200
+PASS: expected configured credentials to permit /; observed HTTP 200
+PASS: expected configured credentials to permit /store; observed HTTP 200
+PASS: expected configured credentials to permit /get; observed HTTP 200
+PASS: expected configured credentials to permit /slow; observed HTTP 200
+PASS: expected authenticated store/get to retain replica reads; observed exact fixture value
+PASS: expected burst of 20 simultaneous requests to pass; observed 20 HTTP 200 responses
+PASS: expected overload to return JSON 429 and Retry-After; observed 21 allowed, 79 limited, exact counter effect
+PASS: expected health/store/get/slow to remain available during root throttling; observed HTTP 200
+PASS: expected root limiter to recover after refill; observed HTTP 200
+ALL PASS: 16 security integration checks
+
+Authenticated HTTPS smoke
+====== summary: 10 pass, 0 fail ======
+ALL PASS
+
+Redis recovery with tracing enabled
+PASS: expected six healthy services; observed redis, redis-replica, app1, app2, app3, nginx healthy
+PASS: expected AOF yes/everysec and named storage; observed /data=docker-based-multiserver-system_redis-data
+PASS: expected synchronized read-only replica, all backends using it, and only NGINX host ports; observed all checks pass
+PASS: expected initial marker on primary, replica, and HTTPS /get; observed initial on all three
+PASS: expected latest value through app1/app2/app3; observed updated via: app2 app3 app1
+PASS: expected JSON 500 in under 5s; observed HTTP 500 in 1.786054s
+PASS: expected primary writes and increments during replica stop; observed stored=true global_count=583
+PASS: expected write made during stop to replicate after recovery; observed during-stop
+PASS: expected JSON 500 in under 5s; observed HTTP 500 in 2.004923s
+PASS: expected primary writes and increments during replica pause; observed stored=true global_count=584
+PASS: expected write made during pause to replicate after recovery; observed during-pause
+PASS: direct primary marker=updated restored; global_count continued 584 -> 585
+PASS: direct primary marker=updated restored; global_count continued 585 -> 586
+PASS: expected changed primary container and same volume; observed new ID with docker-based-multiserver-system_redis-data
+PASS: expected automatic reconnect without backend restarts; observed all backend IDs/start times unchanged and six healthy services
+ALL PASS: 15 Redis integration checks
+
+Default security after DNS fix
+PASS: expected empty AUTH_TOKEN to preserve access to every endpoint; observed HTTP 200
+PASS: expected configured credentials to permit /health; observed HTTP 200
+PASS: expected configured credentials to permit /; observed HTTP 200
+PASS: expected configured credentials to permit /store; observed HTTP 200
+PASS: expected configured credentials to permit /get; observed HTTP 200
+PASS: expected configured credentials to permit /slow; observed HTTP 200
+PASS: expected authenticated store/get to retain replica reads; observed exact fixture value
+PASS: expected burst of 20 simultaneous requests to pass; observed 20 HTTP 200 responses
+PASS: expected overload to return JSON 429 and Retry-After; observed 21 allowed, 79 limited, exact counter effect
+PASS: expected health/store/get/slow to remain available during root throttling; observed HTTP 200
+PASS: expected root limiter to recover after refill; observed HTTP 200
+ALL PASS: 11 security integration checks
+
+Default HTTPS smoke after DNS fix
+====== summary: 10 pass, 0 fail ======
+ALL PASS
+
+Collector outage, direct drain, and automatic IP-change recovery
+Issue #2: collector outage and direct graceful shutdown acceptance
+Expected: API availability and exact primary increments without collector; no backend restart; direct 10s request drains and SDK shutdown fits 15s; exports recover afterward.
+PASS: expected collector offline; observed Jaeger container exited.
+PASS: expected store/get/root HTTP 200 while collector offline; observed exact marker and primary counter 590 -> 591; all three backend IDs/start times unchanged.
+PASS: expected direct 10s request to finish during SIGTERM with collector offline; observed HTTP 200, slept=10, server=app1, exit=0, stop=10.349s, drain+flush=10.080s, in_flight=1.
+PASS: cleanup restored Jaeger and app1 healthy and removed only the owned outage key; internal IPs changed {'jaeger': '192.168.97.10', 'app1': '192.168.97.5'} -> {'jaeger': '192.168.97.5', 'app1': '192.168.97.10'}; NGINX container/master/workers unchanged, untargeted backends unchanged, volumes unchanged.
+PASS: expected automatic DNS/export recovery with fresh traces; observed NGINX -> Go -> Redis after 2 fresh attempts in 2.129s, no proxy reload or untargeted backend restart.
+PASS: expected restored end-to-end export; observed scripts/test-tracing.py ALL PASS after restarting collector and app1.
+ALL PASS: collector outage availability, backend identity stability, direct graceful request, bounded flush, cleanup, and export recovery.
+
+Backend failover with dynamic DNS
+PASS: expected >=18/20 requests successful with app2 stopped; observed 20/20 HTTP200 through NGINX.
+PASS: expected all three backends after recovery; observed app1,app2,app3 without proxy reload.

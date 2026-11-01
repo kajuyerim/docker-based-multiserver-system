@@ -1,0 +1,282 @@
+{
+  "data": [
+    {
+      "traceID": "06d94cc6e8c630f6deb34c1f9d50ad8c",
+      "spans": [
+        {
+          "traceID": "06d94cc6e8c630f6deb34c1f9d50ad8c",
+          "spanID": "d98250086cca2612",
+          "operationName": "GET /store",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "06d94cc6e8c630f6deb34c1f9d50ad8c",
+              "spanID": "4a4cdbc0f6ed168d"
+            }
+          ],
+          "startTime": 1793532878068000,
+          "duration": 2000,
+          "tags": [
+            {
+              "key": "otel.scope.name",
+              "type": "string",
+              "value": "nginx"
+            },
+            {
+              "key": "otel.scope.version",
+              "type": "string",
+              "value": "1.27.5"
+            },
+            {
+              "key": "http.flavor",
+              "type": "string",
+              "value": "1.1"
+            },
+            {
+              "key": "http.method",
+              "type": "string",
+              "value": "GET"
+            },
+            {
+              "key": "http.request_content_length",
+              "type": "int64",
+              "value": 0
+            },
+            {
+              "key": "http.response_content_length",
+              "type": "int64",
+              "value": 128
+            },
+            {
+              "key": "http.route",
+              "type": "string",
+              "value": "/"
+            },
+            {
+              "key": "http.scheme",
+              "type": "string",
+              "value": "https"
+            },
+            {
+              "key": "http.status_code",
+              "type": "int64",
+              "value": 200
+            },
+            {
+              "key": "http.user_agent",
+              "type": "string",
+              "value": "Python-urllib/3.14"
+            },
+            {
+              "key": "net.host.name",
+              "type": "string",
+              "value": "_"
+            },
+            {
+              "key": "net.sock.peer.addr",
+              "type": "string",
+              "value": "192.168.97.1"
+            },
+            {
+              "key": "net.sock.peer.port",
+              "type": "int64",
+              "value": 53480
+            },
+            {
+              "key": "request.id",
+              "type": "string",
+              "value": "b07572d0422ed330537e58c2f8b42d07"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "server"
+            }
+          ],
+          "logs": [],
+          "processID": "p1",
+          "warnings": [
+            "parent span ID=4a4cdbc0f6ed168d is not in the trace; skipping clock skew adjustment"
+          ]
+        },
+        {
+          "traceID": "06d94cc6e8c630f6deb34c1f9d50ad8c",
+          "spanID": "49b3583090fdd9ba",
+          "flags": 1,
+          "operationName": "set",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "06d94cc6e8c630f6deb34c1f9d50ad8c",
+              "spanID": "8810512505b4a4e4"
+            }
+          ],
+          "startTime": 1793532878069374,
+          "duration": 437,
+          "tags": [
+            {
+              "key": "otel.scope.name",
+              "type": "string",
+              "value": "github.com/redis/go-redis/extra/redisotel"
+            },
+            {
+              "key": "otel.scope.version",
+              "type": "string",
+              "value": "semver:9.19.0"
+            },
+            {
+              "key": "db.connection_string",
+              "type": "string",
+              "value": "redis://redis:6379"
+            },
+            {
+              "key": "db.system",
+              "type": "string",
+              "value": "redis"
+            },
+            {
+              "key": "request.id",
+              "type": "string",
+              "value": "b07572d0422ed330537e58c2f8b42d07"
+            },
+            {
+              "key": "server.address",
+              "type": "string",
+              "value": "redis"
+            },
+            {
+              "key": "server.port",
+              "type": "int64",
+              "value": 6379
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "client"
+            }
+          ],
+          "logs": [],
+          "processID": "p2",
+          "warnings": null
+        },
+        {
+          "traceID": "06d94cc6e8c630f6deb34c1f9d50ad8c",
+          "spanID": "8810512505b4a4e4",
+          "flags": 1,
+          "operationName": "GET /store",
+          "references": [
+            {
+              "refType": "CHILD_OF",
+              "traceID": "06d94cc6e8c630f6deb34c1f9d50ad8c",
+              "spanID": "d98250086cca2612"
+            }
+          ],
+          "startTime": 1793532878069121,
+          "duration": 832,
+          "tags": [
+            {
+              "key": "otel.scope.name",
+              "type": "string",
+              "value": "go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+            },
+            {
+              "key": "otel.scope.version",
+              "type": "string",
+              "value": "0.72.0"
+            },
+            {
+              "key": "client.address",
+              "type": "string",
+              "value": "192.168.97.1"
+            },
+            {
+              "key": "http.request.method",
+              "type": "string",
+              "value": "GET"
+            },
+            {
+              "key": "http.response.body.size",
+              "type": "int64",
+              "value": 128
+            },
+            {
+              "key": "http.status_code",
+              "type": "int64",
+              "value": 200
+            },
+            {
+              "key": "http.route",
+              "type": "string",
+              "value": "/store"
+            },
+            {
+              "key": "network.peer.address",
+              "type": "string",
+              "value": "192.168.97.9"
+            },
+            {
+              "key": "network.peer.port",
+              "type": "int64",
+              "value": 42068
+            },
+            {
+              "key": "network.protocol.version",
+              "type": "string",
+              "value": "1.1"
+            },
+            {
+              "key": "request.id",
+              "type": "string",
+              "value": "b07572d0422ed330537e58c2f8b42d07"
+            },
+            {
+              "key": "server.address",
+              "type": "string",
+              "value": "localhost"
+            },
+            {
+              "key": "url.path",
+              "type": "string",
+              "value": "/store"
+            },
+            {
+              "key": "url.scheme",
+              "type": "string",
+              "value": "http"
+            },
+            {
+              "key": "user_agent.original",
+              "type": "string",
+              "value": "Python-urllib/3.14"
+            },
+            {
+              "key": "span.kind",
+              "type": "string",
+              "value": "server"
+            }
+          ],
+          "logs": [],
+          "processID": "p2",
+          "warnings": null
+        }
+      ],
+      "processes": {
+        "p1": {
+          "serviceName": "nginx",
+          "tags": []
+        },
+        "p2": {
+          "serviceName": "multiserver-backend",
+          "tags": [
+            {
+              "key": "service.instance.id",
+              "type": "string",
+              "value": "app2"
+            }
+          ]
+        }
+      },
+      "warnings": null
+    }
+  ]
+}
