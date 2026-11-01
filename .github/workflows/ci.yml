@@ -46,6 +46,9 @@ jobs:
       - name: HTTPS smoke test
         run: ./scripts/test.sh
 
+      - name: Metrics and dashboard integration
+        run: python3 ./scripts/test-metrics.py
+
       - name: Redis replication and persistence tests
         run: ./scripts/test-redis.sh
 
@@ -59,6 +62,7 @@ jobs:
           docker compose up -d --wait --wait-timeout 90
           ./scripts/test-security.sh
           ./scripts/test.sh
+          python3 ./scripts/test-metrics.py
 
       - name: Diagnostics on failure
         if: failure()
