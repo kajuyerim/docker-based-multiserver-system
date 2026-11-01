@@ -49,6 +49,9 @@ jobs:
       - name: Metrics and dashboard integration
         run: python3 ./scripts/test-metrics.py
 
+      - name: Distributed tracing integration
+        run: python3 ./scripts/test-tracing.py
+
       - name: Redis replication and persistence tests
         run: ./scripts/test-redis.sh
 
@@ -63,6 +66,7 @@ jobs:
           ./scripts/test-security.sh
           ./scripts/test.sh
           python3 ./scripts/test-metrics.py
+          python3 ./scripts/test-tracing.py
 
       - name: Diagnostics on failure
         if: failure()
