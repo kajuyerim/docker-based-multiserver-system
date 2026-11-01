@@ -1,0 +1,29 @@
+Issue #3 — load testing and Go benchmark acceptance
+Date: 2026-11-01
+Workload/runner revision: fc72811
+
+PASS: go vet ./... and go test -race -count=1 ./...; full race suite completed in 2.242s.
+PASS: benchmark setup and loop timing reviewed; three real one-second repetitions recorded in load/go_benchmarks.txt.
+PASS: Bash syntax, trusted ShellCheck, JavaScript syntax, Compose profile configuration, and git whitespace checks.
+PASS: pinned grafana/k6:2.3.0 smoke ran for 13.08s, with 4,658 completed iterations and 13,974 requests; no unexpected or consistency failures.
+PASS: final formatter accepted actual pinned k6 output and rejected invalid/mismatched run IDs, mismatched profiles, and shifted measurement windows.
+PASS: deliberately interrupted smoke exited 130, removed its named generator before key cleanup, and removed its ten existing run-owned keys; no matching keys/container remained. Smoke evidence stayed in its temporary directory.
+
+Full performance run (authentication disabled locally; CI uses authentication)
+PASS: complete 265.06s execution, four full 60s plateaus at 1/10/50/100 VUs, 5s ramps, one shared client IP, 0.1s think time, metrics/tracing enabled, HTTPS through NGINX.
+PASS: 98,809 completed business iterations; 296,431 requests; 200,195 accepted HTTP 200 responses; 96,236 expected JSON root 429 responses.
+PASS: 395,240 functional checks; zero unexpected errors and zero exact-value consistency failures.
+PASS: root rate limiting remained active; exactly 600 accepted root requests per 60s window at 10/50/100 VUs.
+PASS: at 100 VUs accepted throughput was 1,921.40 req/s, with accepted p50/p95/p99 of 0.67/2.56/4.96ms. Root rejection rate was 98.95%; accepted throughput mostly represents store/read work.
+PASS: all nine services healthy after the run; generator removed; all 100 run-owned keys removed. Existing data, counters, named volumes, and unidentified anonymous volumes retained.
+Raw metrics, console, initial service readiness, environment, source hashes, and Go benchmarks are under load/. The validated report is load_results.txt.
+
+Sequential post-load regressions
+PASS: HTTPS smoke — 10/10.
+PASS: metrics exposition, all three scrape targets, primary-counter safety, provisioning, and every real Grafana datasource query.
+PASS: real client -> NGINX -> Go -> Redis trace parents, request/replica identity, primary/replica routing, malformed context, sensitive-data exclusion, and exact root counter effects.
+PASS: authentication-disabled security suite — 11/11, including burst, JSON rate limiting, unaffected other routes, exact counter effects, and recovery.
+PASS: independent source, report methodology, and seven-pitfall reviews; existing routing, counters, headers, one-image pattern, published ports, and shutdown/startup behavior preserved.
+
+Measurement boundary
+Apple M5 Pro; Darwin arm64; Go 1.26.3; Docker allocated 15 CPUs and 12,598,730,752 bytes of memory. Generator and all services share the host. Development TLS verification was disabled; request-duration percentiles exclude connection/TLS setup. These observations establish neither a capacity ceiling nor a production latency SLO. CI repeats the full profile on its own host and always uploads fresh results; PR CI must pass before merge.

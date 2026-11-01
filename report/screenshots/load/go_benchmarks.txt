@@ -1,0 +1,12 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/kajuyerim/docker-based-multiserver-system/app
+cpu: Apple M5 Pro
+BenchmarkHandleRoot-15          	   48516	     23364 ns/op	     697 B/op	      24 allocs/op
+BenchmarkHandleRoot-15          	   51938	     22954 ns/op	     697 B/op	      23 allocs/op
+BenchmarkHandleRoot-15          	   51494	     23101 ns/op	     696 B/op	      23 allocs/op
+BenchmarkClampSlowSeconds-15    	739681634	         1.627 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClampSlowSeconds-15    	726545445	         1.633 ns/op	       0 B/op	       0 allocs/op
+BenchmarkClampSlowSeconds-15    	740706828	         1.631 ns/op	       0 B/op	       0 allocs/op
+PASS
+ok  	github.com/kajuyerim/docker-based-multiserver-system/app	7.610s

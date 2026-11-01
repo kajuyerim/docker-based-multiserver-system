@@ -1,0 +1,9 @@
+app1 healthy
+app2 healthy
+app3 healthy
+grafana healthy
+jaeger healthy
+nginx healthy
+prometheus healthy
+redis healthy
+redis-replica healthy

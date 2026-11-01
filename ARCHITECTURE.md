@@ -396,6 +396,8 @@ NGINX waits for all three apps and both monitoring services to be healthy,
 then starts itself. The `docker compose up -d --wait --wait-timeout 90`
 command used in CI additionally waits for all nine default services to report
 healthy. The optional `render` profile adds a tenth service for screenshots.
+The `load` profile supplies a temporary k6 generator when explicitly invoked;
+it does not participate in normal startup or publish a host port.
 Earlier six-service Redis and eight-service monitoring timings remain
 historical evidence; first-run image downloads depend on the network.
 
@@ -588,6 +590,8 @@ they're checking:
 | `./scripts/test-security.sh` (security) | Do optional authentication, NGINX bursts, and rate-limit recovery work without rejected-request mutations? | Authentication or proxy-policy regression. |
 | `python3 scripts/test-metrics.py` (monitoring) | Are all three scrapes healthy, counters unchanged by scrapes, and dashboard queries valid? | Instrumentation, credentials, provisioning, or query regression. |
 | `python3 scripts/test-tracing.py` (tracing) | Does client context form the real NGINX → Go → Redis tree with correct correlation and no stored sensitive fields? | Propagation, instrumentation, export, or redaction regression. |
+| `./scripts/run-load.sh` (load) | Does the complete 1/10/50/100-VU profile preserve functional behavior, and what throughput and latency does this machine observe? | Workload, completeness, HTTP behavior, or replica-consistency regression; timing alone is not an SLO gate. |
+| `./scripts/run-load.sh --smoke` (runner validation) | Does the same workload and report path work with short stages? | Load tooling regression; this is not full performance evidence. |
 | `./scripts/experiments.sh` (evidence) | Does the stack exhibit the documented behaviors? | Captures behavior, including the Redis recovery gate as Experiment 6. |
 
 These remain four tiers: unit logic, concurrency, integration, and
@@ -596,11 +600,14 @@ application routing without pretending to implement replication.
 Real Redis checks cover the behavior that a fake cannot prove.
 
 CI runs `go vet`, race tests, image build, HTTPS smoke, focused Redis
-recovery, security, metrics/dashboard, and live tracing checks on pushes to `main` and
+recovery, security, metrics/dashboard, live tracing, Go benchmarks, and the full
+load profile on pushes to `main` and
 pull requests. Authentication-disabled and authentication-enabled runs
-exercise the optional credential path. Failure
+exercise the optional credential path; load runs use authenticated requests. Failure
 diagnostics include service states and recent logs; teardown always
-runs and retains named storage. Full behavior capture is local-only.
+runs and retains named storage. Performance artifacts come only from the current
+run's temporary directory, including partial diagnostics after a failed run.
+Full experiment capture remains local-only.
 
 Smoke fixtures use unique keys and values, and read-after-write checks
 poll for the exact expected value rather than assuming immediate
@@ -637,6 +644,59 @@ Keeping them separate matters: a smoke-test failure has a different
 investigation path (check Compose, check NGINX config) than a unit-test
 failure (look at the handler in question), and conflating them slows
 debugging.
+
+---
+
+## Load measurements and microbenchmarks
+
+[`bench/load.js`](bench/load.js) uses a closed-loop, ramping-VU workload.
+Its 265-second schedule ramps for five seconds into each of 1, 10, 50, and
+100 virtual users, holds each level for sixty seconds, and ramps down for
+five seconds. A completion grace lets in-flight iterations finish. Each
+iteration requests the root counter, stores a fresh per-iteration value,
+and polls its run-owned key through the read replica until that exact value
+appears, with a ten-second budget and one-second read-request timeouts.
+A 0.1-second think time follows each iteration. Faster responses therefore
+permit more iterations; a VU count is not a fixed arrival rate.
+
+The root's 10-request/second per-IP limit and burst remain active. All VUs
+use one generator address, so the report separates accepted HTTP `200`
+throughput and latency from expected JSON root `429` responses. Store and
+read traffic continue independently of that bucket; replica polling can add
+read requests. Stage accounting uses request start times and full steady
+windows, excluding ramps. Both accepted-only and all-traffic p50/p95/p99
+are retained so fast rejections cannot conceal slower accepted work.
+
+The full runner fails on unexpected responses, incorrect payloads, missed
+exact-value deadlines, incomplete iterations, or incomplete stage evidence.
+It reports observations without claiming a capacity ceiling or applying an
+unjustified latency SLO. The optional thirteen-second smoke schedule checks
+the tooling and writes temporary evidence; it cannot replace the full run.
+
+The official k6 container shares the Docker host with the nine-service
+stack. Requests traverse NGINX's real HTTPS listener, with self-signed
+certificate verification disabled; metrics and tracing remain enabled.
+k6's request-duration measurements cover send/wait/receive time, while
+connection and TLS setup have separate built-in metrics. Generator CPU,
+telemetry work, this endpoint mix, and the local network are part of the
+measurement boundary, so these numbers do not establish off-host production
+capacity.
+
+The Go microbenchmarks isolate a different cost. `BenchmarkHandleRoot`
+calls the handler directly with a reused request and a fresh recorder,
+including JSON, atomic local counting, and a miniredis loopback TCP `INCR`.
+It excludes middleware, HTTP/TLS transport, NGINX, and real Redis persistence.
+`BenchmarkClampSlowSeconds` cycles inputs below, inside, and above the legal
+range. Setup and connection initialization happen outside `B.Loop` timing;
+both benchmarks retain observable results and report allocations. The runner
+collects three one-second repetitions before starting k6.
+
+[`scripts/run-load.sh`](scripts/run-load.sh) records fresh raw metrics,
+validated text, console output, Go benchmarks, and environment metadata.
+Cleanup preserves failures, removes only its keys and generator, and
+retains existing data and named volumes. CI runs this full profile after
+the existing integration gates and uploads only its fresh results directory;
+it never substitutes an old committed report for current measurements.
 
 ---
 
