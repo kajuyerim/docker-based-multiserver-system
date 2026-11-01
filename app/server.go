@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -17,18 +18,23 @@ import (
 // Server holds per-replica state and exposes the backend HTTP handlers.
 type Server struct {
 	serverID string
-	rdb      *redis.Client
+	primary  *redis.Client
+	reader   *redis.Client
 	localCnt atomic.Int64
 	inFlight atomic.Int64
 	logger   *slog.Logger
 	sleep    func(time.Duration)
 }
 
-// NewServer constructs a Server with the given replica id and Redis client.
-func NewServer(serverID string, rdb *redis.Client) *Server {
+// NewServer constructs a Server; a nil reader uses the primary for reads.
+func NewServer(serverID string, primary, reader *redis.Client) *Server {
+	if reader == nil {
+		reader = primary
+	}
 	return &Server{
 		serverID: serverID,
-		rdb:      rdb,
+		primary:  primary,
+		reader:   reader,
 		logger:   slog.Default(),
 		sleep:    time.Sleep,
 	}
@@ -104,7 +110,7 @@ func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
 	}
 
 	local := s.localCnt.Add(1)
-	global, err := s.rdb.Incr(r.Context(), "global_count").Result()
+	global, err := s.primary.Incr(r.Context(), "global_count").Result()
 	if err != nil {
 		s.logger.Error("redis INCR failed", "err", err)
 		s.writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "redis incr failed"})
@@ -125,7 +131,7 @@ func (s *Server) handleStore(w http.ResponseWriter, r *http.Request) {
 		s.writeJSON(w, http.StatusBadRequest, errorResponse{Error: "key and value are required"})
 		return
 	}
-	if err := s.rdb.Set(r.Context(), key, value, 0).Err(); err != nil {
+	if err := s.primary.Set(r.Context(), key, value, 0).Err(); err != nil {
 		s.logger.Error("redis SET failed", "key", key, "err", err)
 		s.writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "redis set failed"})
 		return
@@ -145,7 +151,9 @@ func (s *Server) handleGet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	val, err := s.rdb.Get(r.Context(), key).Result()
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+	defer cancel()
+	val, err := s.reader.Get(ctx, key).Result()
 	switch {
 	case errors.Is(err, redis.Nil):
 		s.writeJSON(w, http.StatusOK, getResponse{

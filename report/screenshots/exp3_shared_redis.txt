@@ -1,25 +1,25 @@
 === Experiment 3: Shared Redis store (/store on one replica, /get from others) ===
-2026-05-17 01:10:08
-Target: http://localhost:8080
+2026-11-01 13:39:13
+Target: https://localhost:8443
 
-Expectation: value written once is readable from any replica.
+Expectation: value written to the primary becomes readable through any backend after replication.
 
 STORE:
 HTTP/1.1 200 OK
 Server: nginx/1.27.5
-Date: Sat, 16 May 2026 22:10:08 GMT
+Date: Sun, 01 Nov 2026 10:39:13 GMT
 Content-Type: application/json
-Content-Length: 67
+Content-Length: 118
 Connection: keep-alive
-X-Request-Id: d9fd660e24e3582c67aa23f816ff47c3
-X-Server-Id: app3
+X-Request-Id: 812f9f536e74321fc5622f45286f7bca
+X-Server-Id: app1
 
-{"server_id":"app3","key":"cmpe476","value":"distributed-systems"}
+{"stored":true,"key":"experiment-1793529552-19419","value":"distributed-systems-1793529552-19419","server_id":"app1"}
 
-GET /get?key=cmpe476 (6 times — should land on different replicas):
-"server_id":"app1"  {"server_id":"app1","key":"cmpe476","value":"distributed-systems"}
-"server_id":"app2"  {"server_id":"app2","key":"cmpe476","value":"distributed-systems"}
-"server_id":"app3"  {"server_id":"app3","key":"cmpe476","value":"distributed-systems"}
-"server_id":"app1"  {"server_id":"app1","key":"cmpe476","value":"distributed-systems"}
-"server_id":"app2"  {"server_id":"app2","key":"cmpe476","value":"distributed-systems"}
-"server_id":"app3"  {"server_id":"app3","key":"cmpe476","value":"distributed-systems"}
+GET /get?key=experiment-1793529552-19419 (6 times — should land on different replicas):
+"server_id":"app3"  {"server_id":"app3","key":"experiment-1793529552-19419","value":"distributed-systems-1793529552-19419"}
+"server_id":"app1"  {"server_id":"app1","key":"experiment-1793529552-19419","value":"distributed-systems-1793529552-19419"}
+"server_id":"app2"  {"server_id":"app2","key":"experiment-1793529552-19419","value":"distributed-systems-1793529552-19419"}
+"server_id":"app3"  {"server_id":"app3","key":"experiment-1793529552-19419","value":"distributed-systems-1793529552-19419"}
+"server_id":"app1"  {"server_id":"app1","key":"experiment-1793529552-19419","value":"distributed-systems-1793529552-19419"}
+"server_id":"app2"  {"server_id":"app2","key":"experiment-1793529552-19419","value":"distributed-systems-1793529552-19419"}

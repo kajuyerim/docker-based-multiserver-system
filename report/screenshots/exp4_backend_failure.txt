@@ -1,6 +1,6 @@
 === Experiment 4: Backend failure (stop app2; >=90% success on 20 reqs) ===
-2026-05-17 01:10:08
-Target: http://localhost:8080
+2026-11-01 13:39:13
+Target: https://localhost:8443
 
 Stopping app2...
 
@@ -12,5 +12,5 @@ Waiting 15s for healthcheck to flip + nginx fail_timeout (10s) to expire...
 
 Distribution after restart (15 requests; all three replicas should reappear):
    5 X-Server-Id: app1
-   5 X-Server-Id: app2
-   5 X-Server-Id: app3
+   4 X-Server-Id: app2
+   6 X-Server-Id: app3

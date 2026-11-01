@@ -28,10 +28,10 @@ func TestConcurrentRoot_AtomicCounters(t *testing.T) {
 	}
 	defer mr.Close()
 
-	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr(), ContextTimeoutEnabled: true})
 	defer rdb.Close()
 
-	srv := NewServer("app1", rdb)
+	srv := NewServer("app1", rdb, nil)
 	httpSrv := httptest.NewServer(srv.Handler())
 	defer httpSrv.Close()
 

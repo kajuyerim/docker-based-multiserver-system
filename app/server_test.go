@@ -29,10 +29,10 @@ func newTestServer(t *testing.T) (*Server, *miniredis.Miniredis) {
 	}
 	t.Cleanup(mr.Close)
 
-	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr(), ContextTimeoutEnabled: true})
 	t.Cleanup(func() { _ = rdb.Close() })
 
-	srv := NewServer("app1", rdb)
+	srv := NewServer("app1", rdb, nil)
 	// No-op sleep so /slow handler tests run instantly.
 	srv.sleep = func(time.Duration) {}
 	return srv, mr

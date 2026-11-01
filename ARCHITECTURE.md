@@ -10,19 +10,24 @@ makes.
 ## System at a glance
 
 A reverse-proxy load balancer (NGINX) fronts three identical stateless
-backend replicas (Go). The replicas share a single Redis store. The whole
-thing runs on Docker Compose's internal network; only NGINX publishes a host
-port.
+backend replicas (Go). All writes go to a persistent Redis primary;
+`/get` reads go to its read replica. These six services use Compose's
+internal network; only NGINX publishes host ports.
 
 ```mermaid
 flowchart LR
-    Client[Client] -->|HTTP :8080| nginx[NGINX]
+    Client[Client] -->|HTTPS :8443 / HTTP :8080| nginx[NGINX]
     nginx -. round-robin .-> app1
     nginx -. round-robin .-> app2
     nginx -. round-robin .-> app3
-    app1 --> redis[(Redis)]
+    app1 --> redis[(Redis primary<br/>INCR / SET)]
     app2 --> redis
     app3 --> redis
+    app1 --> reader[(Redis replica<br/>GET)]
+    app2 --> reader
+    app3 --> reader
+    redis -->|asynchronous replication| reader
+    redis --- data[(redis-data volume<br/>AOF)]
 ```
 
 The interesting questions are: why three replicas? why one proxy? why Redis
@@ -43,8 +48,8 @@ appear that don't exist with a single server:
 
 A reverse proxy solves (1): clients have a stable address; the proxy picks a
 replica per request. A shared key-value store solves (2): replicas don't
-gossip among themselves — they all read/write the same canonical state in
-Redis.
+gossip among themselves. They send writes to the same primary and read
+keys from its asynchronously replicated copy.
 
 Three replicas is the minimum useful number for demonstrating distribution
 (two replicas would be alternation, not "distribution") and for showing
@@ -72,12 +77,59 @@ different counts of requests. If your application logic depends on
 cross-replica visibility, this is a foot-gun.
 
 `global_count` shows what happens when state lives **in a shared store**:
-every write is a network round-trip (slower), but every replica sees the
-same value. The result is consistent across the cluster.
+every increment is a network round-trip (slower), but all backends use
+the same atomic counter on the primary. Counter responses come directly
+from `INCR`; they do not read the replica.
 
 The rule of thumb is: anything a user can observe via a different request
 route (e.g., a session token, a like count, a job status) needs to be in
 shared storage; anything internal to a single request can stay local.
+
+---
+
+## Persistent primary and eventual reads
+
+The primary serves `INCR` for `GET /` and `SET` for `/store`. It enables
+`appendonly yes` with `appendfsync everysec`; AOF files live at `/data`
+on the named `redis-data` volume. Normal restart, primary-container
+replacement, and full-stack `docker compose down` followed by `up`
+retain that volume. `docker compose down -v` deliberately deletes it.
+Unidentified existing volumes are never adopted or pruned.
+
+The every-second fsync policy balances disk work against durability.
+An orderly shutdown preserves acknowledged writes, but a host crash
+can lose approximately one second of recent writes. A named volume is
+also not a backup: loss of its underlying storage still loses data.
+
+`redis-replica` follows the primary on `redis:6379`, rejects writes, and
+sets `replica-serve-stale-data no`. Its local storage is rebuildable;
+the primary's volume is the recovery source. There is no automatic
+promotion, Sentinel, or Cluster. Losing the primary therefore still
+interrupts writes until it recovers.
+
+Application routing is explicit:
+
+| Configuration / operation | Destination |
+|---------------------------|-------------|
+| `REDIS_ADDR` (default `localhost:6379`) | Primary for counter `INCR` and `/store` `SET`. |
+| `REDIS_READ_ADDR` (default `REDIS_ADDR`) | Reader for `/get` `GET`; Compose selects `redis-replica:6379`. |
+| Identical primary and reader addresses | One Redis client, preserving primary-only local operation. |
+
+Both distinct clients receive bounded startup pings. Clients enable
+context-deadline handling, and `/get` derives a two-second deadline
+from the HTTP request context, preserving an earlier cancellation or
+deadline. A stalled reader thus produces the existing JSON `500`
+(`{"error":"redis get failed"}`) before NGINX's 15-second read timeout.
+NGINX does not retry these `500` responses, and the backend does not
+fall back to the primary.
+
+Healthy replication is asynchronous, so successful `/store` does not
+guarantee that the next `/get` sees that write. A reader can briefly
+return an earlier value, or `200` with `"value":null` for a key not yet
+replicated. A disconnected or synchronizing replica rejects reads
+instead of serving stale data. Counter increments and `/store` remain
+available during a reader outage. Once Redis recovers, existing client
+pools reconnect without restarting the backends.
 
 ---
 
@@ -269,6 +321,23 @@ another layer inside it.
 
 ---
 
+## TLS termination and graceful shutdown
+
+NGINX accepts HTTPS on host `8443` and HTTP on `8080`, then proxies HTTP
+inside Compose's network. Local certificate generation supplies a
+self-signed certificate with localhost SANs; a production deployment
+needs a trusted certificate rather than clients disabling verification.
+Certificates are mounted read-only and private keys remain gitignored.
+
+The Go process traps SIGTERM/Interrupt and drains HTTP requests before
+closing its distinct Redis clients. The longest `/slow` request is ten
+seconds, the drain allows twelve seconds, and Compose allows fifteen
+seconds before forceful termination: `10s < 12s < 15s`. An atomic
+in-flight gauge records active work in shutdown logs. Draining one
+backend preserves active requests while NGINX can use the others.
+
+---
+
 ## Why `depends_on: condition: service_healthy`
 
 Plain `depends_on: [redis]` means "start redis first" — but "start" only
@@ -281,13 +350,23 @@ healthcheck passes before starting this service". For our stack, the
 healthchecks are:
 
 - `redis` → `redis-cli ping` (Redis is accepting commands).
+- `redis-replica` → role is replica, primary link is up, and initial
+  synchronization has finished. It starts after a healthy primary;
+  backends wait for both Redis services.
 - `app1` / `app2` / `app3` → `wget --spider /health` (the HTTP server is
   responding).
+- `nginx` → an HTTP `/health` request through the proxy succeeds.
 
 NGINX waits for all three apps to be healthy, then starts itself. The
-practical effect: `docker compose up -d` is "done" only when the entire
-stack is actually serving — no race conditions, no flaky startup, no
-need for `sleep 5` in scripts.
+`docker compose up -d --wait --wait-timeout 90` command used in CI
+additionally waits for all six services to report healthy. Cached-image
+startup timing is recorded in the acceptance evidence; first-run image
+downloads depend on the network.
+
+These are startup gates, not ongoing dependency restarts. `/health`
+remains a process-liveness check and does not ping Redis. A later Redis
+outage is handled by request errors and client reconnection; it does
+not require restarting the backend containers.
 
 ---
 
@@ -329,7 +408,7 @@ than at connect time (harder for NGINX to retry mid-stream).
 ## Tracing without OpenTelemetry
 
 Distributed tracing usually implies OTLP, Jaeger, a sampling story, a
-backend storage system, dashboards. For a three-service stack you don't
+backend storage system, dashboards. For this small stack you don't
 need any of that — just a per-request id that propagates.
 
 NGINX has `$request_id` built in (a 32-char hex string per request). We
@@ -374,13 +453,52 @@ they're checking:
 
 | Tier | Question it answers | Failure means |
 |------|---------------------|---------------|
-| `go test ./app/...` (unit) | Does each handler do what it claims for one request? | Logic bug in a handler. |
-| `go test -race ./app/...` (stress) | Is concurrent access to counters race-free? | Counter implementation isn't atomic — lost updates under contention. |
+| `cd app && go test ./...` (unit) | Are handlers, reader routing, errors, cancellation, and deadlines correct? | Application logic regression. |
+| `cd app && go test -race ./...` (stress) | Is concurrent access to counters race-free? | Counter implementation isn't atomic — lost updates under contention. |
 | `./scripts/test.sh` (smoke) | Does the full stack expose every endpoint correctly through NGINX? | Integration regression — Compose, NGINX config, or backend wiring is broken. |
-| `./scripts/experiments.sh` (evidence) | Does the stack exhibit the documented behaviors? | Used to capture observed numbers for documentation; not a pass/fail gate. |
+| `./scripts/test-redis.sh` (recovery) | Do real Redis replication, deadlines, persistence, and reconnection work? | Redis configuration, routing, or recovery regression. |
+| `./scripts/experiments.sh` (evidence) | Does the stack exhibit the documented behaviors? | Captures behavior, including the Redis recovery gate as Experiment 6. |
 
-CI runs the first three on every push. The fourth is local-only,
-because its purpose is "capture numbers", not "prevent merge".
+These remain four tiers: unit logic, concurrency, integration, and
+behavior experiments. Two independent miniredis instances prove
+application routing without pretending to implement replication.
+Real Redis checks cover the behavior that a fake cannot prove.
+
+CI runs `go vet`, race tests, image build, HTTPS smoke, and the focused
+Redis recovery checks on pushes to `main` and pull requests. Failure
+diagnostics include service states and recent logs; teardown always
+runs and retains named storage. Full behavior capture is local-only.
+
+Smoke fixtures use unique keys and values, and read-after-write checks
+poll for the exact expected value rather than assuming immediate
+consistency. The API-only smoke suite retains one small `smoke-*` key
+per run because there is no delete endpoint. Recovery and experiment
+scripts remove only their own keys; they never flush Redis or remove
+volumes.
+
+The recovery script interrupts Redis and requires no other application
+traffic. Its 15 checks cover six-service readiness, persistence settings,
+replica read-only enforcement, updated values through all three
+backends, stopped/paused readers, and primary restart/replacement.
+Persistence assertions inspect the primary directly so the replica
+cannot hide lost storage. Backend container IDs and start times must
+remain unchanged. Recovery polling is bounded, and cleanup restores
+interrupted services even after a failure.
+
+The captured [Experiment 6](report/screenshots/exp6_redis_persistence.txt)
+passed all 15 checks: a stopped reader returned JSON `500` in 1.82 seconds
+and a paused reader in 2.01 seconds. Direct primary checks confirmed
+counter continuity `176 → 177` after restart and `177 → 178` after
+container replacement. The [acceptance evidence](report/screenshots/issue6_acceptance.txt)
+records full-stack persistence, graceful shutdown, startup timing, and
+regression checks.
+
+Final acceptance completed a cached-image build and full-stack startup
+in 20 seconds. Ordinary teardown/startup retained the primary marker
+and counter (`210 → 211` on the next increment). With the read address
+empty, direct reads still succeeded while the replica was paused. A
+direct ten-second `/slow` request completed with HTTP `200` during
+SIGTERM; logs recorded one in-flight request and successful draining.
 
 Keeping them separate matters: a smoke-test failure has a different
 investigation path (check Compose, check NGINX config) than a unit-test
@@ -389,24 +507,15 @@ debugging.
 
 ---
 
-## What this implementation deliberately does NOT do
+## Deliberate limitations
 
-- **No HTTPS / TLS.** Out of scope; would be terminated at NGINX in
-  production.
-- **No Redis persistence.** Default Redis is in-memory; restarting the
-  stack zeros the counters. Adding `--appendonly yes` and a volume
-  would preserve state.
-- **No Redis replication or sharding.** Single Redis instance is the
-  bottleneck and single point of failure. Acceptable for a teaching
-  system; a real production system would use Redis Sentinel or Cluster.
-- **No rate limiting at NGINX.** Could be added via `limit_req_zone`;
-  again, out of scope.
-- **No graceful shutdown** in the Go backend. The default
-  `http.ListenAndServe` doesn't drain in-flight requests on SIGTERM.
-  Acceptable because Docker Compose's default 10-second shutdown
-  timeout is enough for this workload (no requests longer than 10s
-  except `/slow`).
-
-These are sensible follow-up exercises but would expand the scope
-beyond "demonstrate the multi-replica coordination problem", which is
-the actual goal.
+- **One write primary, no automatic promotion.** The read replica adds
+  read capacity and demonstrates replication; it does not make writes
+  highly available. Sentinel/Cluster and sharding remain future work.
+- **Eventual reads and bounded durability.** There is no read-your-write
+  guarantee across the replica, and AOF `everysec` has a crash-loss
+  window. Backups and off-host storage are not configured.
+- **Local TLS material.** Self-signed development certificates require
+  a trusted replacement for production, with certificate renewal.
+- **No authentication or rate limiting.** The current endpoints are
+  suitable for a local demonstration; access controls are future work.

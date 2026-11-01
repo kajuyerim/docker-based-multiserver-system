@@ -4,6 +4,7 @@
 //   - SERVER_ID:  replica identifier surfaced via the X-Server-Id response header.
 //   - PORT:       TCP port to listen on (defaults to 8080).
 //   - REDIS_ADDR: host:port of the shared Redis store (defaults to localhost:6379).
+//   - REDIS_READ_ADDR: optional host:port for reads (defaults to REDIS_ADDR).
 package main
 
 import (
@@ -26,18 +27,35 @@ func main() {
 	serverID := envOrDefault("SERVER_ID", "app1")
 	port := envOrDefault("PORT", "8080")
 	redisAddr := envOrDefault("REDIS_ADDR", "localhost:6379")
+	redisReadAddr := envOrDefault("REDIS_READ_ADDR", redisAddr)
 
-	rdb := redis.NewClient(&redis.Options{Addr: redisAddr})
+	rdb := redis.NewClient(&redis.Options{Addr: redisAddr, ContextTimeoutEnabled: true})
 	defer rdb.Close()
 
+	reader := rdb
+	if redisReadAddr != redisAddr {
+		reader = redis.NewClient(&redis.Options{Addr: redisReadAddr, ContextTimeoutEnabled: true})
+		defer reader.Close()
+	}
+
 	pingCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-	if err := rdb.Ping(pingCtx).Err(); err != nil {
+	err := rdb.Ping(pingCtx).Err()
+	cancel()
+	if err != nil {
 		logger.Error("redis ping failed", "addr", redisAddr, "err", err)
 		os.Exit(1)
 	}
+	if reader != rdb {
+		pingCtx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
+		err = reader.Ping(pingCtx).Err()
+		cancel()
+		if err != nil {
+			logger.Error("redis reader ping failed", "addr", redisReadAddr, "err", err)
+			os.Exit(1)
+		}
+	}
 
-	srv := NewServer(serverID, rdb)
+	srv := NewServer(serverID, rdb, reader)
 
 	addr := ":" + port
 	httpSrv := &http.Server{
@@ -59,7 +77,8 @@ func main() {
 		errCh <- httpSrv.ListenAndServe()
 	}()
 
-	logger.Info("backend starting", "server_id", serverID, "addr", addr, "redis", redisAddr)
+	logger.Info("backend starting", "server_id", serverID, "addr", addr,
+		"redis", redisAddr, "redis_read", redisReadAddr)
 
 	select {
 	case err := <-errCh:

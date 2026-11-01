@@ -1,0 +1,35 @@
+=== Experiment 6: Redis replication, failure recovery, and persistence ===
+2026-11-01 13:39:37
+Target: https://localhost:8443
+
+Redis integration checks against https://localhost:8443
+This run interrupts Redis services. Keep other application traffic stopped.
+
+--- Startup, durability, replication, and isolation ---
+PASS: expected six healthy services; observed redis, redis-replica, app1, app2, app3, nginx healthy
+PASS: expected AOF yes/everysec and named storage; observed /data=docker-based-multiserver-system_redis-data
+PASS: expected synchronized read-only replica, all backends using it, and only NGINX host ports; observed all checks pass
+
+--- Initial and updated replication through every backend ---
+PASS: expected initial marker on primary, replica, and HTTPS /get; observed initial on all three
+PASS: expected latest value through app1/app2/app3; observed updated via: app1 app2 app3
+
+--- Stopped replica: failed reads, primary availability, automatic recovery ---
+PASS: expected JSON 500 in under 5s; observed HTTP 500 in 1.818286s
+PASS: expected primary writes and increments during replica stop; observed stored=true global_count=175
+PASS: expected write made during stop to replicate after recovery; observed during-stop
+
+--- Paused replica: bounded reads and recovery ---
+PASS: expected JSON 500 in under 5s; observed HTTP 500 in 2.008733s
+PASS: expected primary writes and increments during replica pause; observed stored=true global_count=176
+PASS: expected write made during pause to replicate after recovery; observed during-pause
+
+--- Primary restart retains marker and global counter ---
+PASS: direct primary marker=updated restored; global_count continued 176 -> 177
+
+--- Primary replacement retains the same named storage ---
+PASS: direct primary marker=updated restored; global_count continued 177 -> 178
+PASS: expected changed primary container and same volume; observed new ID with docker-based-multiserver-system_redis-data
+PASS: expected automatic reconnect without backend restarts; observed all backend IDs/start times unchanged and six healthy services
+
+ALL PASS: 15 Redis integration checks

@@ -13,7 +13,7 @@ concurrency:
 
 jobs:
   ci:
-    name: vet + test + build + smoke
+    name: vet + test + build + smoke + Redis recovery
     runs-on: ubuntu-latest
 
     steps:
@@ -40,9 +40,21 @@ jobs:
       - name: docker compose build
         run: docker compose build
 
-      - name: Smoke test (compose up, run, tear down)
+      - name: Start stack
+        run: docker compose up -d --wait --wait-timeout 90
+
+      - name: HTTPS smoke test
+        run: ./scripts/test.sh
+
+      - name: Redis replication and persistence tests
+        run: ./scripts/test-redis.sh
+
+      - name: Diagnostics on failure
+        if: failure()
         run: |
-          chmod +x scripts/test.sh
-          docker compose up -d
-          ./scripts/test.sh
-          docker compose down
+          docker compose ps -a
+          docker compose logs --tail=100
+
+      - name: Tear down
+        if: always()
+        run: docker compose down

@@ -11,14 +11,17 @@
 set -uo pipefail
 
 BASE_URL="${BASE_URL:-https://localhost:8443}"
-CURL_TLS_FLAGS=()
+CURL_TLS_FLAG=''
 if [[ "$BASE_URL" == https://* ]]; then
-    CURL_TLS_FLAGS=(-k)
+    CURL_TLS_FLAG=-k
 fi
 
 pass=0
 fail=0
 failures=()
+run_id="$(date +%s)-$$"
+smoke_key="smoke-$run_id"
+smoke_value="fixture-$run_id"
 
 # --- helpers --------------------------------------------------------------
 
@@ -26,7 +29,8 @@ failures=()
 hit() {
     local path="$1"
     local tmp; tmp=$(mktemp)
-    BODY=$(curl "${CURL_TLS_FLAGS[@]}" -sS -D "$tmp" -o - "$BASE_URL$path" 2>/dev/null) || true
+    BODY=$(curl ${CURL_TLS_FLAG:+"$CURL_TLS_FLAG"} --connect-timeout 1 --max-time "${2:-15}" \
+        -sS -D "$tmp" -o - "$BASE_URL$path" 2>/dev/null) || true
     STATUS=$(awk 'NR==1 {print $2}' "$tmp")
     HEADERS=$(cat "$tmp")
     rm -f "$tmp"
@@ -55,14 +59,14 @@ bad() { fail=$((fail+1)); failures+=("$1"); printf '  FAIL: %s -- %s\n' "$1" "$2
 printf '====== smoke tests against %s ======\n\n' "$BASE_URL"
 printf 'waiting for /health to respond...'
 for _ in $(seq 1 30); do
-    if curl "${CURL_TLS_FLAGS[@]}" -sf "$BASE_URL/health" >/dev/null 2>&1; then
+    if curl ${CURL_TLS_FLAG:+"$CURL_TLS_FLAG"} --connect-timeout 1 --max-time 1 -sf "$BASE_URL/health" >/dev/null 2>&1; then
         printf ' ready\n'
         break
     fi
     printf '.'
     sleep 1
 done
-if ! curl "${CURL_TLS_FLAGS[@]}" -sf "$BASE_URL/health" >/dev/null 2>&1; then
+if ! curl ${CURL_TLS_FLAG:+"$CURL_TLS_FLAG"} --connect-timeout 1 --max-time 1 -sf "$BASE_URL/health" >/dev/null 2>&1; then
     printf '\nERROR: %s/health not reachable after 30s. Is the stack up?\n' "$BASE_URL"
     exit 1
 fi
@@ -114,18 +118,27 @@ fi
 
 section '/store + /get round-trip (shared Redis backing store)'
 
-printf 'GET /store?key=smoke&value=fixture\n'
-hit "/store?key=smoke&value=fixture"
+printf 'GET /store?key=%s&value=%s\n' "$smoke_key" "$smoke_value"
+hit "/store?key=$smoke_key&value=$smoke_value"
 show
-store_status=$STATUS; store_sid=$(hdr X-Server-Id)
+store_status=$STATUS; store_sid=$(hdr X-Server-Id); store_body=$BODY
 
-printf 'GET /get?key=smoke\n'
-hit "/get?key=smoke"
+printf 'GET /get?key=%s (allowing replication to catch up)\n' "$smoke_key"
+read_deadline=$((SECONDS + 10))
+while :; do
+    hit "/get?key=$smoke_key" 1
+    if [ "$STATUS" = "200" ] && grep -Fq "\"value\":\"$smoke_value\"" <<< "$BODY"; then
+        break
+    fi
+    [ "$SECONDS" -ge "$read_deadline" ] && break
+    sleep 0.1
+done
 show
 get_status=$STATUS; get_sid=$(hdr X-Server-Id)
 
 if [ "$store_status" = "200" ] && [ "$get_status" = "200" ] \
-   && grep -q '"value":"fixture"' <<< "$BODY"; then
+   && grep -q '"stored":true' <<< "$store_body" \
+   && grep -Fq "\"value\":\"$smoke_value\"" <<< "$BODY"; then
     ok "round-trip OK: stored on $store_sid, read back via $get_sid -- shared Redis works"
 else
     bad '/store + /get' "round-trip failed (store=$store_status get=$get_status)"
@@ -134,7 +147,7 @@ fi
 # --- /get on missing key returns JSON null --------------------------------
 
 section '/get on missing key -> JSON null (not 404, not empty string)'
-ghost_key="ghost-$$"
+ghost_key="ghost-$run_id"
 printf 'GET /get?key=%s\n' "$ghost_key"
 hit "/get?key=$ghost_key"
 show
@@ -192,7 +205,7 @@ section 'round-robin distribution (30 requests through nginx)'
 printf 'firing 30 sequential GET / requests...\n'
 
 dist=$(for _ in $(seq 1 30); do
-    curl "${CURL_TLS_FLAGS[@]}" -sS -D - -o /dev/null "$BASE_URL/" \
+    curl ${CURL_TLS_FLAG:+"$CURL_TLS_FLAG"} --connect-timeout 1 --max-time 5 -sS -D - -o /dev/null "$BASE_URL/" \
         | grep -i "^x-server-id:" | head -n1
 done | sort | uniq -c)
 

@@ -1,14 +1,14 @@
 === Experiment 2: Local vs global state (6 GET / requests) ===
-2026-05-17 01:10:08
-Target: http://localhost:8080
+2026-11-01 13:39:13
+Target: https://localhost:8443
 
 Expectation: local_count grows within a single replica (atomic.Int64,
 per-replica) while global_count rises monotonically across the cluster
 (Redis INCR, shared).
 
-"server_id":"app1"  {"server_id":"app1","local_count":23,"global_count":63}
-"server_id":"app2"  {"server_id":"app2","local_count":22,"global_count":64}
-"server_id":"app3"  {"server_id":"app3","local_count":20,"global_count":65}
-"server_id":"app1"  {"server_id":"app1","local_count":24,"global_count":66}
-"server_id":"app2"  {"server_id":"app2","local_count":23,"global_count":67}
-"server_id":"app2"  {"server_id":"app2","local_count":24,"global_count":68}
+"server_id":"app2"  {"server_id":"app2","local_count":14,"global_count":134}
+"server_id":"app3"  {"server_id":"app3","local_count":52,"global_count":135}
+"server_id":"app1"  {"server_id":"app1","local_count":46,"global_count":136}
+"server_id":"app2"  {"server_id":"app2","local_count":15,"global_count":137}
+"server_id":"app3"  {"server_id":"app3","local_count":53,"global_count":138}
+"server_id":"app3"  {"server_id":"app3","local_count":54,"global_count":139}
