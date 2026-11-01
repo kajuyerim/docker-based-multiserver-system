@@ -15,18 +15,21 @@ import (
 	"time"
 
 	"github.com/redis/go-redis/v9"
+	"go.opentelemetry.io/otel/trace"
+	"go.opentelemetry.io/otel/trace/noop"
 )
 
 // Server holds per-replica state and exposes the backend HTTP handlers.
 type Server struct {
-	serverID string
-	primary  *redis.Client
-	reader   *redis.Client
-	localCnt atomic.Int64
-	inFlight atomic.Int64
-	logger   *slog.Logger
-	sleep    func(time.Duration)
-	metrics  *serverMetrics
+	serverID       string
+	primary        *redis.Client
+	reader         *redis.Client
+	localCnt       atomic.Int64
+	inFlight       atomic.Int64
+	logger         *slog.Logger
+	sleep          func(time.Duration)
+	metrics        *serverMetrics
+	tracerProvider trace.TracerProvider
 }
 
 // NewServer constructs a Server; a nil reader uses the primary for reads.
@@ -35,11 +38,12 @@ func NewServer(serverID string, primary, reader *redis.Client) *Server {
 		reader = primary
 	}
 	s := &Server{
-		serverID: serverID,
-		primary:  primary,
-		reader:   reader,
-		logger:   slog.Default(),
-		sleep:    time.Sleep,
+		serverID:       serverID,
+		primary:        primary,
+		reader:         reader,
+		logger:         slog.Default(),
+		sleep:          time.Sleep,
+		tracerProvider: noop.NewTracerProvider(),
 	}
 	s.metrics = newServerMetrics(s)
 	return s
@@ -59,7 +63,7 @@ func (s *Server) HandlerWithAuth(token string) http.Handler {
 	mux.HandleFunc("/slow", s.handleSlow)
 	mux.Handle("/metrics", s.metrics.handler)
 	mux.HandleFunc("/", s.handleRoot)
-	return chain(mux, s.withInFlight, s.withResponseHeaders, s.withMetrics, s.withAuth(token))
+	return chain(mux, s.withInFlight, s.withResponseHeaders, s.withMetrics, s.withTracing, s.withAuth(token))
 }
 
 func (s *Server) withAuth(token string) func(http.Handler) http.Handler {

@@ -6,6 +6,7 @@
 //   - REDIS_ADDR: host:port of the shared Redis store (defaults to localhost:6379).
 //   - REDIS_READ_ADDR: optional host:port for reads (defaults to REDIS_ADDR).
 //   - AUTH_TOKEN: optional bearer token required on all endpoints when set.
+//   - OTEL_EXPORTER_OTLP_ENDPOINT: optional OTLP HTTP base URL for request traces.
 package main
 
 import (
@@ -30,6 +31,11 @@ func main() {
 	redisAddr := envOrDefault("REDIS_ADDR", "localhost:6379")
 	redisReadAddr := envOrDefault("REDIS_READ_ADDR", redisAddr)
 	authToken := os.Getenv("AUTH_TOKEN")
+	tracing, err := newTracing(context.Background(), serverID, os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"))
+	if err != nil {
+		logger.Error("tracing initialization failed", "err", err)
+		os.Exit(1)
+	}
 
 	rdb := redis.NewClient(&redis.Options{Addr: redisAddr, ContextTimeoutEnabled: true})
 	defer rdb.Close()
@@ -41,7 +47,7 @@ func main() {
 	}
 
 	pingCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	err := rdb.Ping(pingCtx).Err()
+	err = rdb.Ping(pingCtx).Err()
 	cancel()
 	if err != nil {
 		logger.Error("redis ping failed", "addr", redisAddr, "err", err)
@@ -58,6 +64,11 @@ func main() {
 	}
 
 	srv := NewServer(serverID, rdb, reader)
+	srv.tracerProvider = tracing.provider
+	if err := instrumentRedisTracing(tracing.provider, rdb, reader); err != nil {
+		logger.Error("redis tracing initialization failed", "err", err)
+		os.Exit(1)
+	}
 
 	addr := ":" + port
 	httpSrv := &http.Server{
@@ -94,13 +105,21 @@ func main() {
 	// Drain must clear the longest legal request (/slow caps at 10s) and finish
 	// inside compose's stop_grace_period (15s): 10s < 12s < 15s.
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 12*time.Second)
-	defer cancel()
-	if err := httpSrv.Shutdown(shutdownCtx); err != nil {
-		if errors.Is(err, context.DeadlineExceeded) {
+	shutdownErr := httpSrv.Shutdown(shutdownCtx)
+	cancel()
+	if shutdownErr != nil {
+		if errors.Is(shutdownErr, context.DeadlineExceeded) {
 			logger.Error("shutdown drain timed out, connections aborted", "in_flight", srv.InFlight())
 		} else {
-			logger.Error("shutdown failed", "err", err)
+			logger.Error("shutdown failed", "err", shutdownErr)
 		}
+	}
+	flushCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	if err := tracing.shutdown(flushCtx); err != nil {
+		logger.Error("tracing shutdown failed", "err", err)
+	}
+	cancel()
+	if shutdownErr != nil {
 		os.Exit(1)
 	}
 	logger.Info("shutdown complete", "server_id", serverID)
