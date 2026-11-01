@@ -13,8 +13,9 @@ concurrency:
 
 jobs:
   ci:
-    name: vet + test + build + smoke + Redis recovery
+    name: vet + tests + stack acceptance + load
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     steps:
       - name: Checkout
@@ -67,6 +68,20 @@ jobs:
           ./scripts/test.sh
           python3 ./scripts/test-metrics.py
           python3 ./scripts/test-tracing.py
+
+      - name: Go benchmarks and full HTTPS load
+        env:
+          AUTH_TOKEN: ci-only-integration-token
+          LOAD_RESULTS_DIR: ${{ runner.temp }}/performance
+        run: ./scripts/run-load.sh
+
+      - name: Upload performance results
+        if: always()
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: performance-results
+          path: ${{ runner.temp }}/performance
+          if-no-files-found: ignore
 
       - name: Diagnostics on failure
         if: failure()

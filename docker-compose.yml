@@ -171,6 +171,24 @@ services:
       retries: 15
     restart: unless-stopped
 
+  loadgen:
+    image: grafana/k6:2.3.0
+    profiles: [load]
+    user: "${LOAD_UID:-1000}:${LOAD_GID:-1000}"
+    environment:
+      BASE_URL: https://nginx:443
+      AUTH_TOKEN: ${AUTH_TOKEN:-}
+      LOAD_RUN_ID: ${LOAD_RUN_ID:-}
+      LOAD_PROFILE: ${LOAD_PROFILE:-full}
+    volumes:
+      - type: bind
+        source: ./bench
+        target: /scripts
+        read_only: true
+      - type: bind
+        source: ${LOAD_OUTPUT_DIR:-./report/screenshots/load}
+        target: /results
+
   renderer:
     image: grafana/grafana-image-renderer:v5.12.10
     profiles: [render]
