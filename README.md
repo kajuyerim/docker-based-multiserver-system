@@ -37,6 +37,67 @@ The nine-service tracing [acceptance run](report/screenshots/issue2_acceptance.t
 
 ---
 
+## Kubernetes
+
+The Kubernetes deployment contains the core API stack: NGINX, three Go replicas,
+and a Redis primary/read replica. Compose remains the full monitoring demo.
+Install Docker, [kind](https://kind.sigs.k8s.io/docs/user/quick-start/),
+[Helm](https://helm.sh/docs/intro/install/), and kubectl, then run:
+
+```bash
+./scripts/deploy-kind.sh
+curl http://localhost:8081/health
+kind export kubeconfig --name multiserver
+kubectl get pods,hpa,ingress,pvc -n multiserver
+```
+
+The helper creates only the `multiserver` kind cluster, builds and loads one app
+image, installs Traefik and metrics-server, deploys the chart, and runs the smoke
+suite through the ingress on loopback port 8081. It uses a temporary kubeconfig
+and leaves the cluster running. `kind delete cluster --name multiserver` removes
+that cluster **and its Redis data**; it does not affect Compose volumes.
+
+[`helm/multiserver/values.yaml`](helm/multiserver/values.yaml) configures image tags,
+resource requests/limits, ingress, storage, and replicas. The CPU HPA defaults to
+3–6 backends at 70% utilization and requires metrics-server; set
+`autoscaling.enabled=false` to use `replicaCount` instead. Pod names provide unique
+server IDs. NGINX resolves the headless backend Service to individual ready Pod
+IPs, preserving round-robin routing and retries. Both backend probes call
+`/health`; as in Compose, this checks process health, not Redis availability.
+Rolling updates keep new pods ready for six seconds before retiring old ones,
+allowing NGINX's five-second DNS cache to discover their addresses.
+The primary uses AOF on a PVC and a single-replica Recreate deployment; the reader
+is disposable and becomes ready after synchronization. There is no Redis promotion.
+
+For another cluster, publish the app image to your registry, provide an ingress
+controller, metrics-server, and a default StorageClass, and set `dnsResolver` to
+that cluster's DNS Service IP. For example:
+
+```bash
+helm upgrade --install multiserver helm/multiserver -n multiserver --create-namespace \
+  --set image.repository=YOUR_REGISTRY/multiserver-app --set image.tag=YOUR_TAG \
+  --set dnsResolver=YOUR_CLUSTER_DNS_IP
+```
+
+Local kind uses plain HTTP. For a remote deployment, configure `ingress.host`,
+`ingress.className`, and `ingress.tlsSecret` for an existing TLS Secret. Optional
+`authSecret` names an existing Secret containing `AUTH_TOKEN`; probes use it too.
+Redis and backend Services stay internal. The local helper's insecure kubelet TLS
+flag is solely for metrics-server on kind, not part of the application chart.
+
+The equivalent default manifests are checked in under [`k8s/`](k8s/):
+`kubectl apply -f k8s/namespace.yaml` then
+`kubectl apply -n multiserver -f k8s/multiserver.yaml`. Use either Helm or raw
+manifests for a namespace. Regenerate them after chart changes with
+`helm template multiserver helm/multiserver --namespace multiserver > k8s/multiserver.yaml`;
+`./scripts/check-k8s.sh` checks parity. The PVC is retained on Helm uninstall;
+delete it explicitly only when its data is no longer needed.
+
+Recorded [Kubernetes acceptance](report/screenshots/issue9_acceptance.txt) includes
+ingress smoke tests, authenticated probes, 40/40 requests during backend failure,
+and exact Redis state surviving primary Pod replacement. CI repeats the deployment
+and ingress smoke test on a disposable kind cluster.
+
 ## Architecture
 
 ```mermaid

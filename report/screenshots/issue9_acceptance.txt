@@ -1,0 +1,35 @@
+Issue #9 Kubernetes acceptance — 2026-11-02
+
+Scope agreed with the user: core API only (NGINX, Go backends, Redis primary
+and replica). Compose retains Prometheus, Grafana, and Jaeger.
+
+Local environment: Apple Silicon, Docker 29.8.2, kind 0.33.0,
+Kubernetes 1.37.0, Helm 4.3.1, Traefik chart 42.2.0,
+metrics-server 0.9.1. Dedicated kind cluster: multiserver.
+
+PASS: go test -race ./... and go vet ./... (unchanged backend).
+PASS: helm lint, exact default-render/raw-manifest parity, custom-values render.
+PASS: deploy-kind.sh created the cluster, built/loaded the single app image,
+      installed ingress and resource metrics, and waited for healthy workloads.
+PASS: 10/10 smoke checks through http://localhost:8081, including all five
+      JSON routes, errors, clamping, and round-robin distribution (11/9/10).
+PASS: HPA AbleToScale and ScalingActive, observed CPU 7%/70%, 3 replicas.
+PASS: all workload resource requests/limits and probes present; primary PVC Bound.
+PASS: 40/40 root requests succeeded during forced deletion of a backend Pod.
+PASS: primary Pod replacement retained the fixture and exact global counter
+      (147), read directly from Redis after recovery. Fixture removed.
+PASS: authSecret enabled authentication; missing token returned 401;
+      authenticated smoke 10/10, health probes healthy, distribution 10/11/9.
+      Default settings restored and the temporary test Secret removed.
+PASS: focused review found no project pitfall violations.
+PASS: repeated deploy-kind.sh upgraded the existing cluster and passed 10/10
+      smoke checks. A six-second Deployment readiness window lets NGINX refresh
+      its five-second DNS cache before old backend Pods are retired.
+PASS: 150/150 ingress health requests succeeded throughout a further rolling
+      backend update with that readiness window.
+
+Limits: local kind uses HTTP and self-signed kubelet certificates. TLS and
+authentication are optional existing Secrets for other clusters. The backend
+health endpoint is process health; it does not probe Redis on each request.
+Redis replication is asynchronous and has no automatic primary promotion.
+No Compose containers or named volumes were removed during these checks.
