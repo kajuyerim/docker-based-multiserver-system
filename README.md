@@ -187,6 +187,34 @@ Every backend endpoint, including `/health` and unknown paths, requires a bearer
 
 Use HTTPS when sending credentials. The HTTP port remains enabled for local compatibility, so this configuration alone is not a public deployment policy. Environment configuration is visible to administrators with Docker access; keep tokens out of committed files and captured logs. Rate limiting applies only to the counter endpoint, and this shared-token guard provides no per-user permissions or token rotation service.
 
+CI runs [`gosec`](https://github.com/securego/gosec) with a HIGH-severity gate,
+[`govulncheck`](https://go.dev/doc/tutorial/govulncheck) for reachable Go
+vulnerabilities, and [`Trivy`](https://trivy.dev/) against the built backend image
+for HIGH/CRITICAL CVEs, including unfixed findings. Scanner versions are pinned in
+the workflow. The curated [lint configuration](.golangci.yml) enables `govet`,
+`ineffassign`, `staticcheck`, and `unused`; lint failures also block CI.
+
+Race tests produce `app/coverage.out`, uploaded as the `go-coverage` CI artifact.
+Download it and run `go tool cover -html=coverage.out` from `app/` to inspect the
+report. To repeat the gates locally with the workflow's scanner versions installed:
+
+```bash
+cd app
+go test -race -coverprofile=coverage.out -covermode=atomic ./...
+golangci-lint run ./...
+gosec -severity high ./...
+govulncheck ./...
+cd ..
+docker compose build
+trivy image --scanners vuln --severity HIGH,CRITICAL --exit-code 1 multiserver-app:local
+```
+
+The backend requires Go 1.26.10 (selected through `app/go.mod` and CI) and uses a
+supported Alpine 3.24 runtime. These versions and the `x/net` update address the
+baseline security findings; existing historical benchmark results retain their
+original toolchain versions. Scanning covers the backend image and Go module,
+not every third-party image in Compose.
+
 ## Metrics and dashboard
 
 Open the [Multiserver overview dashboard](https://localhost:8443/grafana/d/multiserver) after startup. Before the first start, set `GRAFANA_ADMIN_PASSWORD` to replace the local demo password. Grafana creates its `admin` account in the persistent database on first startup; changing the environment variable later does not reset an existing password. `GRAFANA_ROOT_URL` defaults to `https://localhost:8443/grafana/` and can be set for a different public URL.
@@ -261,7 +289,7 @@ NGINX-generated `429` responses contain JSON, `Retry-After`, and `X-Request-Id`;
 | Backend port leakage | Only `nginx` declares `ports:` (`8080:80` and `8443:443`). All other services live on Compose's internal network. |
 | Counter increments on the wrong endpoints | Only `GET /` mutates counters. `/health`, `/store`, `/get`, `/slow`, `/metrics` are counter-free. |
 | Three near-identical Docker images | One `build:` directive on `app1`; `app2` and `app3` reference `image: multiserver-app:local`. **One image, three replicas.** |
-| Slow startup | Multi-stage Docker build (Go 1.26-alpine builder → Alpine 3.20 runtime). Healthcheck-gated dependencies; startup timing is recorded in the acceptance evidence. |
+| Slow startup | Multi-stage Docker build (Go 1.26.10-alpine3.24 builder → Alpine 3.24 runtime). Healthcheck-gated dependencies; startup timing is recorded in the acceptance evidence. |
 | Backend failure breaking client requests | NGINX `proxy_next_upstream error timeout http_502 http_503 http_504; proxy_next_upstream_tries 3` transparently retries on the next replica. Empirically: 20 of 20 requests succeed with one backend stopped. |
 
 ---
@@ -366,7 +394,7 @@ See the [validated report](report/screenshots/load_results.txt), [raw k6 metrics
 - **Store:** [Redis](https://redis.io) 7 (alpine), AOF primary + asynchronous read replica
 - **Monitoring:** [Prometheus](https://prometheus.io) 3.15.1, [Grafana](https://grafana.com) 13.3.0, [`client_golang`](https://github.com/prometheus/client_golang)
 - **Tracing:** [OpenTelemetry](https://opentelemetry.io) Go HTTP/Redis instrumentation, [Jaeger](https://www.jaegertracing.io) 2.22.0
-- **Runtime image:** Alpine 3.20, non-root `app` user
+- **Runtime image:** Alpine 3.24, non-root `app` user
 - **Orchestration:** Docker Compose (single `docker-compose.yml`, no overrides)
 - **Tests:** Go's `testing` + [`miniredis/v2`](https://github.com/alicebob/miniredis); k6 2.3.0 for HTTPS load; Bash runners; Python 3 standard library for monitoring, tracing, and load-result validation
 - **CI:** GitHub Actions
