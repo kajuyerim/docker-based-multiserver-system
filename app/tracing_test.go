@@ -50,8 +50,8 @@ func TestTracing_ContinuesW3CParentAndLinksRedis(t *testing.T) {
 		t.Fatalf("root status: %d", rec.Code)
 	}
 	spans := exporter.GetSpans()
-	if len(spans) != 2 {
-		t.Fatalf("exported spans: got %d, want one server and one Redis client; %v", len(spans), spans)
+	if len(spans) != 3 {
+		t.Fatalf("exported spans: got %d, want one server and two Redis clients; %v", len(spans), spans)
 	}
 	server := spanByKind(t, spans, trace.SpanKindServer)
 	client := spanByKind(t, spans, trace.SpanKindClient)
@@ -65,6 +65,9 @@ func TestTracing_ContinuesW3CParentAndLinksRedis(t *testing.T) {
 		t.Errorf("span names: server %q, client %q", server.Name, client.Name)
 	}
 	for _, span := range spans {
+		if span.SpanKind == trace.SpanKindClient && span.Parent.SpanID() != server.SpanContext.SpanID() {
+			t.Errorf("%s lost its HTTP parent", span.Name)
+		}
 		if got := spanAttribute(span.Attributes, "request.id"); got != "traced-request" {
 			t.Errorf("%s request.id: got %q", span.Name, got)
 		}
@@ -244,7 +247,7 @@ func TestTracing_ExportsOTLPHTTPAndFlushes(t *testing.T) {
 				}
 			}
 		}
-		if len(spans) != 2 || spans["GET /"] == nil || spans["incr"] == nil {
+		if len(spans) != 3 || spans["GET /"] == nil || spans["incr"] == nil || spans["publish"] == nil {
 			t.Fatalf("OTLP payload missing expected spans: %v", spans)
 		}
 		if string(spans["incr"].GetParentSpanId()) != string(spans["GET /"].GetSpanId()) {

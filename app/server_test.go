@@ -33,6 +33,7 @@ func newTestServer(t *testing.T) (*Server, *miniredis.Miniredis) {
 	t.Cleanup(func() { _ = rdb.Close() })
 
 	srv := NewServer("app1", rdb, nil)
+	t.Cleanup(srv.stopEvents)
 	// No-op sleep so /slow handler tests run instantly.
 	srv.sleep = func(time.Duration) {}
 	return srv, mr

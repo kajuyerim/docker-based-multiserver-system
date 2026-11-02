@@ -101,6 +101,7 @@ func main() {
 	}
 
 	logger.Info("shutdown initiated", "server_id", serverID, "in_flight", srv.InFlight())
+	srv.stopEvents()
 
 	// Drain must clear the longest legal request (/slow caps at 10s) and finish
 	// inside compose's stop_grace_period (15s): 10s < 12s < 15s.
