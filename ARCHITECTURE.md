@@ -592,6 +592,7 @@ they're checking:
 | `python3 scripts/test-tracing.py` (tracing) | Does client context form the real NGINX → Go → Redis tree with correct correlation and no stored sensitive fields? | Propagation, instrumentation, export, or redaction regression. |
 | `./scripts/run-load.sh` (load) | Does the complete 1/10/50/100-VU profile preserve functional behavior, and what throughput and latency does this machine observe? | Workload, completeness, HTTP behavior, or replica-consistency regression; timing alone is not an SLO gate. |
 | `./scripts/run-load.sh --smoke` (runner validation) | Does the same workload and report path work with short stages? | Load tooling regression; this is not full performance evidence. |
+| `./scripts/chaos.sh` (failure SLO) | Do five minutes of requests stay at least 95% successful overall and in every 30-second window during nine backend outages? | Failover or recovery no longer meets the measured SLO. |
 | `./scripts/experiments.sh` (evidence) | Does the stack exhibit the documented behaviors? | Captures behavior, including the Redis recovery gate as Experiment 6. |
 
 These remain four tiers: unit logic, concurrency, integration, and

@@ -354,6 +354,7 @@ NGINX-generated `429` responses contain JSON, `Retry-After`, and `X-Request-Id`;
 | WebSocket events | `cd app && EVENTS_TEST_URL=http://localhost:8080 AUTH_TOKEN="$AUTH_TOKEN" go test -race -run '^TestEventsIntegration$' -v ./...` (stack up, no other API traffic) | Verifies cross-replica counter events and keeps the connection idle for 65 seconds to exercise NGINX's WebSocket ping handling. Set `AUTH_TOKEN` to the same value used to start the stack. |
 | Load | `./scripts/run-load.sh` (stack up, no other traffic) | Runs Go microbenchmarks and the complete 1/10/50/100-VU HTTPS profile; validates exact replica reads and reports accepted traffic separately from expected root `429` responses. |
 | Load runner smoke | `./scripts/run-load.sh --smoke` | Exercises the same workload with short stages and temporary evidence; does not replace the full performance run. |
+| Chaos | `./scripts/chaos.sh` (stack up, no other traffic) | Five minutes of HTTPS requests while randomly killing one backend every 30 seconds and restarting it ten seconds later; requires at least 95% valid responses overall and in every 30-second window. |
 | Experiments | `./scripts/experiments.sh` (stack up, no other traffic) | Captures the five original behavior experiments plus Redis recovery as Experiment 6; Redis-check failures propagate through output capture. |
 | CI | Push to `main` or open a PR | Runs `go vet`, race tests, image build, HTTPS smoke, Redis recovery, security, metrics/dashboard, live tracing, Go benchmarks, and the full load profile. Uploads fresh performance evidence; teardown runs even after failure. |
 
@@ -362,6 +363,26 @@ The smoke suite uses only HTTP(S) API calls and retains one small, unique `smoke
 Recorded [Experiment 6](report/screenshots/exp6_redis_persistence.txt) passed all 15 checks. Reads returned JSON `500` in 1.82 seconds with the replica stopped and 2.01 seconds with it paused. The primary counter continued `176 → 177` after restart and `177 → 178` after replacement; backend IDs and start times stayed unchanged. [Final acceptance](report/screenshots/issue6_acceptance.txt) also verified primary-only configuration, data surviving full-stack teardown/startup, and a direct ten-second request completing during SIGTERM.
 
 ---
+
+## Chaos acceptance
+
+Run `./scripts/chaos.sh` with the same `AUTH_TOKEN` used by the running Compose
+stack. It sends eight root requests per second, below the normal rate limit,
+for five minutes. At seconds 30 through 270, it kills a random backend with
+SIGKILL, verifies it stays stopped for ten seconds, then restarts it and waits
+for health before the next cycle. Only one backend is interrupted at a time.
+
+The run requires at least 2,400 requests, zero dropped scheduled iterations, and at
+least 95% valid HTTP 200 responses both overall and in each 30-second window.
+k6 may schedule one extra arrival at the five-minute boundary.
+Rate-limited responses count as failures. This checks failover under steady
+traffic, not peak capacity or Redis primary failover. Cleanup restores an
+interrupted backend and removes only the run's load generator, preserving data
+and volumes. Results and raw metrics are written to
+[`chaos_results.txt`](report/screenshots/chaos_results.txt) and
+[`chaos_summary.json`](report/screenshots/chaos_summary.json). The recorded run
+completed **2,401/2,401 successful requests over 300.012 seconds**, with all ten
+windows at 100% and all nine services healthy afterward.
 
 ## Performance
 
