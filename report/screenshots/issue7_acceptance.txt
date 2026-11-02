@@ -1,0 +1,19 @@
+Issue #7 OpenAPI + Swagger UI acceptance — 2026-11-02
+
+PASS: Redocly CLI 2.72.1 recommended rules validate OpenAPI 3.0.3.
+      One advisory warning: repository claims no license, so info.license omitted.
+PASS: schema review against Go handlers: five JSON routes plus /metrics;
+      nullable missing values, asynchronous reads, slow clamping, optional auth,
+      root-only rate limiting, errors, and backend identity headers documented.
+PASS: Swagger UI 5.34.1 npm tarball SHA512 integrity verified; local assets
+      include upstream LICENSE, NOTICE, and bundled dependency license notices.
+PASS: NGINX config validation; HTTP and HTTPS serve spec/UI/CSS/JS byte-for-byte.
+PASS: /docs redirects to /docs/ on the same public origin and port.
+PASS: browser renders operations and schemas; Authorize with the test fixture,
+      Try it out, Execute /health returns HTTP 200 and server_id app3.
+PASS: existing authenticated HTTPS smoke 10/10 and security checks 16/16.
+PASS: focused review and project pitfall checks.
+
+Documentation is public static content. API authentication remains enforced.
+Kubernetes serves the core API; Swagger mounts are Compose-only. No CDN or
+external spec validator is used. CI lints the spec and verifies served assets.

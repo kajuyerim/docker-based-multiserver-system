@@ -59,6 +59,14 @@ jobs:
         working-directory: ./app
         run: go vet ./...
 
+      - name: Set up Node for API lint
+        uses: actions/setup-node@v6
+        with:
+          node-version: '22'
+
+      - name: Lint OpenAPI
+        run: npx --yes @redocly/cli@2.72.1 lint api/openapi.yaml
+
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v9.3.0
         with:
@@ -109,6 +117,13 @@ jobs:
 
       - name: HTTPS smoke test
         run: ./scripts/test.sh
+
+      - name: Served API documentation
+        run: |
+          curl --fail --silent --show-error --insecure https://localhost:8443/docs/openapi.yaml | cmp api/openapi.yaml -
+          curl --fail --silent --show-error --insecure --location https://localhost:8443/docs | grep -q 'SwaggerUIBundle'
+          curl --fail --silent --show-error --insecure https://localhost:8443/docs/swagger-ui-bundle.js --output /dev/null
+          curl --fail --silent --show-error --insecure https://localhost:8443/docs/swagger-ui.css --output /dev/null
 
       - name: Metrics and dashboard integration
         run: python3 ./scripts/test-metrics.py

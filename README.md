@@ -31,6 +31,7 @@ The nine-service tracing [acceptance run](report/screenshots/issue2_acceptance.t
 | `https://localhost:8443/slow?seconds=N` | Sleep N seconds (silently clamped to 10) |
 | `https://localhost:8443/health` | Liveness probe (no counter side-effects) |
 | `https://localhost:8443/metrics` | Prometheus exposition from the selected backend; honors `AUTH_TOKEN` |
+| [API docs](https://localhost:8443/docs/) | Swagger UI with request examples and interactive API calls |
 | [Grafana](https://localhost:8443/grafana/) | Dashboard UI; local login `admin` / `local-grafana-admin` |
 | [Prometheus](https://localhost:8443/prometheus/) | Scrape targets, metric queries, and stored time series |
 | [Jaeger](https://localhost:8443/jaeger/) | NGINX → Go → Redis traces and timing |
@@ -259,6 +260,17 @@ Trace export runs in the background, so a collector outage does not fail API req
 ---
 
 ## API reference
+
+Open [Swagger UI](https://localhost:8443/docs/) after starting Compose. It loads
+the local [OpenAPI 3.0 contract](api/openapi.yaml), including schemas, error
+responses, and query parameters. When `AUTH_TOKEN` is set, use **Authorize** with
+the token before **Try it out**. The documentation is public; API requests still
+require authentication. Swagger assets are served locally by NGINX. Kubernetes
+currently serves the core API only.
+
+CI validates the spec with pinned Redocly CLI 2.72.1 and checks that NGINX serves
+the same spec and UI assets. Run `npx --yes @redocly/cli@2.72.1 lint api/openapi.yaml`
+locally with Node 22.12 or later.
 
 | Method | Path | Query params | Response body | Notes |
 |--------|------|--------------|---------------|-------|
