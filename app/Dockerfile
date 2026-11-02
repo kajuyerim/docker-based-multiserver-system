@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 
 # ---- build stage --------------------------------------------------------------
-FROM golang:1.26-alpine AS build
+FROM golang:1.26.10-alpine3.24 AS build
 
 WORKDIR /src
 
@@ -21,7 +21,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
     -o /out/app .
 
 # ---- runtime stage ------------------------------------------------------------
-FROM alpine:3.20 AS runtime
+FROM alpine:3.24 AS runtime
 
 LABEL org.opencontainers.image.title="multiserver-app" \
       org.opencontainers.image.description="CMPE476 Project 2 backend replica" \
