@@ -125,11 +125,15 @@ spec:
       annotations:
         checksum/config: 71bd6693d96de9b73c26af2866b12b7190bc732c941ac7d2f022fc9fed712301
     spec:
-      terminationGracePeriodSeconds: 20
+      terminationGracePeriodSeconds: 30
       containers:
         - name: app
           image: "multiserver-app:local"
           imagePullPolicy: IfNotPresent
+          lifecycle:
+            preStop:
+              exec:
+                command: [sh, -c, sleep 10]
           ports: [{name: http, containerPort: 8080}]
           envFrom:
             - configMapRef: {name: multiserver-app}

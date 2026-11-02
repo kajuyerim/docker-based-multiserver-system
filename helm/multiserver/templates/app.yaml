@@ -15,11 +15,15 @@ spec:
       annotations:
         checksum/config: {{ include (print $.Template.BasePath "/config.yaml") . | sha256sum }}
     spec:
-      terminationGracePeriodSeconds: 20
+      terminationGracePeriodSeconds: 30
       containers:
         - name: app
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
+          lifecycle:
+            preStop:
+              exec:
+                command: [sh, -c, sleep 10]
           ports: [{name: http, containerPort: 8080}]
           envFrom:
             - configMapRef: {name: {{ .Release.Name }}-app}

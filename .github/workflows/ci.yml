@@ -52,22 +52,57 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version: '1.26'
+          go-version-file: app/go.mod
           cache-dependency-path: app/go.sum
 
       - name: go vet
         working-directory: ./app
         run: go vet ./...
 
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v9.3.0
+        with:
+          version: v2.15.0
+          working-directory: app
+
+      - name: Install Go security scanners
+        run: |
+          go install github.com/securego/gosec/v2/cmd/gosec@v2.30.0
+          go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
+
+      - name: gosec HIGH severity gate
+        working-directory: ./app
+        run: gosec -severity high ./...
+
+      - name: Reachable Go vulnerabilities
+        working-directory: ./app
+        run: govulncheck ./...
+
       - name: go test -race
         working-directory: ./app
-        run: go test -race -v ./...
+        run: go test -race -v -coverprofile=coverage.out -covermode=atomic ./...
+
+      - name: Upload Go coverage
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: go-coverage
+          path: app/coverage.out
+          if-no-files-found: error
 
       - name: Generate local TLS certificate
         run: ./scripts/gen-cert.sh
 
       - name: docker compose build
         run: docker compose build
+
+      - name: Trivy HIGH and CRITICAL image gate
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          version: v0.76.1
+          image-ref: multiserver-app:local
+          scanners: vuln
+          severity: HIGH,CRITICAL
+          exit-code: '1'
 
       - name: Start stack
         run: docker compose up -d --wait --wait-timeout 90

@@ -1,0 +1,36 @@
+Issue #10 security CI acceptance — 2026-11-02
+
+Pinned tools: gosec v2.30.0, govulncheck v1.1.4,
+golangci-lint v2.15.0, Trivy v0.76.1.
+
+Baseline scan behavior:
+- govulncheck exited 3 for reachable findings in Go 1.26.3 and x/net v0.59.0.
+- Trivy exited 1 for HIGH CVE-2026-78669 in x/net v0.59.0 and warned that
+  the Alpine 3.20 runtime was unsupported.
+- gosec HIGH scan had no findings.
+
+Focused remediation: Go 1.26.10 in go.mod, Docker builder, and CI;
+x/net v0.60.0; Alpine 3.24 runtime (resolved to 3.24.3 in this build).
+No exclusions or vulnerability ignore files were added.
+
+PASS: go vet ./...
+PASS: go test -race -coverprofile=coverage.out -covermode=atomic ./...
+      69.5% statement coverage; coverage artifact configured in CI.
+PASS: golangci-lint run ./... — 0 issues with govet, ineffassign,
+      staticcheck, and unused enabled.
+PASS: gosec -severity high ./... — 0 issues, 0 nosec suppressions.
+PASS: govulncheck ./... — 0 reachable vulnerabilities, 0 findings in imported
+      packages. Two advisory-bearing required modules have no called vulnerable
+      symbols; govulncheck exits 0 under its normal reachable-code policy.
+PASS: trivy image --scanners vuln --severity HIGH,CRITICAL --exit-code 1
+      multiserver-app:local — 0 HIGH/CRITICAL findings; unfixed findings included.
+PASS: Docker build; runtime user remains app; all nine Compose services healthy.
+PASS: authenticated HTTPS smoke 10/10 and security integration 16/16.
+PASS: Prometheus/Grafana integration, including datasource/dashboard queries.
+PASS: NGINX/Go/Redis tracing, parent relationships, primary/replica routing,
+      request correlation, malformed context, privacy, and counter safety.
+PASS: focused CI/configuration and project pitfall review.
+
+The new gates scan Go source/dependencies and the backend image. Other Compose
+images are outside this issue's image-scan scope. Coverage is reported, with no
+arbitrary percentage gate. Existing named volumes were preserved.

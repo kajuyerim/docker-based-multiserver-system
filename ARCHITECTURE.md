@@ -310,10 +310,10 @@ on each of the three app services, and `build: ./app` only on `app1`.
 The [`app/Dockerfile`](app/Dockerfile) has two stages:
 
 ```dockerfile
-FROM golang:1.26-alpine AS build
+FROM golang:1.26.10-alpine3.24 AS build
 # ... compile ...
 
-FROM alpine:3.20 AS runtime
+FROM alpine:3.24 AS runtime
 # ... copy binary + minimal runtime deps ...
 ```
 
@@ -325,8 +325,8 @@ is needed at runtime.
 The multi-stage build keeps only the compiled binary in the runtime
 image:
 
-- Builder stage: `golang:1.26-alpine` → produces `/out/app`.
-- Runtime stage: `alpine:3.20` (~5 MB) + `wget` for the healthcheck +
+- Builder stage: `golang:1.26.10-alpine3.24` → produces `/out/app`.
+- Runtime stage: `alpine:3.24` + `wget` for the healthcheck +
   the compiled binary and its runtime dependencies.
 
 The runtime image omits the compiler, build tools, and source tree.
