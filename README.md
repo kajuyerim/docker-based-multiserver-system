@@ -281,6 +281,39 @@ locally with Node 22.12 or later.
 | `GET` | `/slow` | `seconds` (int, required) | `{"server_id":"appN","slept":N}` | `seconds` is silently clamped to `[0, 10]`; `400` if missing or non-numeric |
 | `GET` | `/metrics` | — | Prometheus exposition | Authenticated when `AUTH_TOKEN` is set; does not increment business counters |
 
+`GET /events` upgrades to a WebSocket connection and sends JSON text frames in
+the form `{"global_count":N}`. A successful application `GET /` publishes its
+new count through the primary Redis `counter_updates` channel, so clients
+connected to any backend replica can receive it. Delivery is best effort with
+no replay: direct Redis writes are not watched, concurrent notifications may
+arrive out of order, and Redis outages can lose notifications while the
+incremented counter remains stored. The backend publishes after a successful
+counter increment; a publish failure is logged and does not fail the root
+response. The endpoint sends ping frames every 20 seconds, limits writes to
+five seconds, and disconnects clients during backend shutdown.
+
+Browser WebSocket APIs cannot set a custom Authorization header. With auth
+disabled, open a same-origin UI page and run this in its browser console:
+
+```js
+const events = new WebSocket(`${location.protocol === "https:" ? "wss" : "ws"}://${location.host}/events`);
+events.onmessage = event => console.log(JSON.parse(event.data));
+```
+
+With auth enabled, use
+`wscat` and the same token as the stack (the `--no-check` option is for the
+local self-signed certificate):
+
+```sh
+npx --yes wscat@6.1.0 --no-check -c wss://localhost:8443/events -H "Authorization: Bearer $AUTH_TOKEN"
+```
+
+The WebSocket handshake and protocol/upgrade rejections are HTTP/WebSocket
+responses rather than JSON API responses. Authentication failures and Redis
+subscription failures remain JSON (`401` and `503`). `GET /` is the only method
+that increments counters; other methods to `/` return JSON `405` with
+`Allow: GET`, before touching counters.
+
 Every backend API response carries:
 
 - `Content-Type: application/json` for JSON API responses; successful `/metrics` uses Prometheus exposition
@@ -318,6 +351,7 @@ NGINX-generated `429` responses contain JSON, `Retry-After`, and `X-Request-Id`;
 | Metrics | `python3 scripts/test-metrics.py` (stack up, Python 3) | Checks exposition, scrape targets, counter safety, authenticated scraping, Grafana provisioning, and finite results for every dashboard query. |
 | Tracing | `python3 scripts/test-tracing.py` (stack up, Python 3, no other traffic) | Verifies client → NGINX → Go → Redis parents, request/replica identity, primary/replica routing, malformed context, sensitive-data exclusion, and exact counter effects. |
 | Security | `./scripts/test-security.sh` (stack up, no other traffic) | Checks optional authentication, rejection without data changes, allowed bursts, JSON `429`, exact counter effects, and recovery. Set the same `AUTH_TOKEN` used to start the stack. |
+| WebSocket events | `cd app && EVENTS_TEST_URL=http://localhost:8080 AUTH_TOKEN="$AUTH_TOKEN" go test -race -run '^TestEventsIntegration$' -v ./...` (stack up, no other API traffic) | Verifies cross-replica counter events and keeps the connection idle for 65 seconds to exercise NGINX's WebSocket ping handling. Set `AUTH_TOKEN` to the same value used to start the stack. |
 | Load | `./scripts/run-load.sh` (stack up, no other traffic) | Runs Go microbenchmarks and the complete 1/10/50/100-VU HTTPS profile; validates exact replica reads and reports accepted traffic separately from expected root `429` responses. |
 | Load runner smoke | `./scripts/run-load.sh --smoke` | Exercises the same workload with short stages and temporary evidence; does not replace the full performance run. |
 | Experiments | `./scripts/experiments.sh` (stack up, no other traffic) | Captures the five original behavior experiments plus Redis recovery as Experiment 6; Redis-check failures propagate through output capture. |

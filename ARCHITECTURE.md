@@ -700,6 +700,21 @@ it never substitutes an old committed report for current measurements.
 
 ---
 
+## Live counter events
+
+`GET /` increments the primary counter atomically, then publishes its value on
+Redis channel `counter_updates`. Each `/events` WebSocket subscribes to the
+primary so any replica can stream the update as `{"global_count":N}`. Publishing
+has a 500ms deadline; a failure is logged without turning a committed increment
+into an HTTP failure. Non-GET requests to `/` return `405` before any increment.
+
+This is a live feed with no replay. Concurrent publications may arrive out of
+order, and disconnected clients or Redis outages can lose events. Direct Redis
+writes do not publish notifications. Each connection has one subscription and
+bounded writes; ping/pong traffic keeps idle connections alive through NGINX.
+Backend shutdown cancels these long-lived connections before draining HTTP work.
+Authentication applies to the upgrade, and browser origins must match the host.
+
 ## Deliberate limitations
 
 - **One write primary, no automatic promotion.** The read replica adds

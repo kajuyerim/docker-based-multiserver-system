@@ -67,7 +67,7 @@ func (s *Server) withMetrics(next http.Handler) http.Handler {
 
 func metricRoute(path string) string {
 	switch path {
-	case "/", "/health", "/store", "/get", "/slow", "/metrics":
+	case "/", "/health", "/store", "/get", "/slow", "/metrics", "/events":
 		return path
 	default:
 		return "unmatched"

@@ -30,6 +30,8 @@ type Server struct {
 	sleep          func(time.Duration)
 	metrics        *serverMetrics
 	tracerProvider trace.TracerProvider
+	eventsContext  context.Context
+	stopEvents     context.CancelFunc
 }
 
 // NewServer constructs a Server; a nil reader uses the primary for reads.
@@ -46,6 +48,7 @@ func NewServer(serverID string, primary, reader *redis.Client) *Server {
 		tracerProvider: noop.NewTracerProvider(),
 	}
 	s.metrics = newServerMetrics(s)
+	s.eventsContext, s.stopEvents = context.WithCancel(context.Background())
 	return s
 }
 
@@ -61,6 +64,7 @@ func (s *Server) HandlerWithAuth(token string) http.Handler {
 	mux.HandleFunc("/store", s.handleStore)
 	mux.HandleFunc("/get", s.handleGet)
 	mux.HandleFunc("/slow", s.handleSlow)
+	mux.HandleFunc("/events", s.handleEvents)
 	mux.Handle("/metrics", s.metrics.handler)
 	mux.HandleFunc("/", s.handleRoot)
 	return chain(mux, s.withInFlight, s.withResponseHeaders, s.withMetrics, s.withTracing, s.withAuth(token))
@@ -143,6 +147,11 @@ func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
 		s.writeJSON(w, http.StatusNotFound, errorResponse{Error: "not found"})
 		return
 	}
+	if r.Method != http.MethodGet {
+		w.Header().Set("Allow", http.MethodGet)
+		s.writeJSON(w, http.StatusMethodNotAllowed, errorResponse{Error: "method not allowed"})
+		return
+	}
 
 	local := s.localCnt.Add(1)
 	global, err := s.primary.Incr(r.Context(), "global_count").Result()
@@ -151,6 +160,12 @@ func (s *Server) handleRoot(w http.ResponseWriter, r *http.Request) {
 		s.writeJSON(w, http.StatusInternalServerError, errorResponse{Error: "redis incr failed"})
 		return
 	}
+
+	publishCtx, cancel := context.WithTimeout(r.Context(), 500*time.Millisecond)
+	if err := s.primary.Publish(publishCtx, counterChannel, strconv.FormatInt(global, 10)).Err(); err != nil {
+		s.logger.Error("counter event publish failed", "err", err)
+	}
+	cancel()
 
 	s.writeJSON(w, http.StatusOK, rootResponse{
 		ServerID:    s.serverID,

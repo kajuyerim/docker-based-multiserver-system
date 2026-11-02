@@ -147,6 +147,13 @@ jobs:
           python3 ./scripts/test-metrics.py
           python3 ./scripts/test-tracing.py
 
+      - name: WebSocket integration through NGINX
+        working-directory: app
+        env:
+          AUTH_TOKEN: ci-only-integration-token
+          EVENTS_TEST_URL: http://localhost:8080
+        run: go test -race -run '^TestEventsIntegration$' -v ./...
+
       - name: Go benchmarks and full HTTPS load
         env:
           AUTH_TOKEN: ci-only-integration-token

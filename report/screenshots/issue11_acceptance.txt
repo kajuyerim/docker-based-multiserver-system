@@ -1,0 +1,27 @@
+Issue #11 WebSocket counter updates acceptance — 2026-11-02
+
+PASS: go vet, full race suite, 200-request counter stress, and 20 concurrent
+      WebSocket events (five race-detector repetitions with unique counts).
+PASS: cross-replica event delivery, auth rejection, same-origin acceptance,
+      cross-origin rejection, Redis subscription failure, shutdown cleanup,
+      and non-GET root requests rejected before counters change.
+PASS: golangci-lint, gosec HIGH, govulncheck, and Trivy HIGH/CRITICAL image gate.
+PASS: authenticated Compose WebSocket upgrade through NGINX reached app1;
+      root requests on app1/app2/app3 delivered exact counts 3698–3704.
+      The connection survived 65 seconds idle and delivered the next update.
+PASS: wscat 6.1.0 over WSS with local test token received JSON counts
+      3705, 3706, 3707 from root requests served by app1, app2, app3.
+PASS: authenticated smoke 10/10, security 16/16, real tracing, and metrics/
+      Grafana regressions; all nine services healthy.
+PASS: Helm/render parity; kind rollout and ingress smoke 10/10; WebSocket
+      updates across all three Pods, including after 65 seconds idle.
+PASS: upgrade carries backend, request, and trace identity headers in Compose.
+PASS: OpenAPI lint and focused review. Linter warnings are missing project
+      license and WebSocket success being 101 instead of a 2XX HTTP response.
+
+Each connection owns one Redis primary subscription. Notifications are live,
+best effort, and not replayed; concurrent publication may arrive out of order.
+Redis INCR remains atomic; failed publication logs an error without failing
+an already-counted request. Direct Redis mutations do not publish events.
+Client writes and ping responses have five-second deadlines. Shutdown cancels
+long-lived event connections before draining ordinary HTTP requests.
