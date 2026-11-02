@@ -33,3 +33,11 @@ authentication are optional existing Secrets for other clusters. The backend
 health endpoint is process health; it does not probe Redis on each request.
 Redis replication is asynchronous and has no automatic primary promotion.
 No Compose containers or named volumes were removed during these checks.
+
+Post-merge follow-up: main CI 41424182243 exposed a single transient 502 after
+backend rollout despite the six-second readiness window. The follow-up in the
+security CI PR adds a ten-second preStop serving interval and a thirty-second
+termination budget, allowing cached DNS routes to drain before SIGTERM.
+PASS: follow-up fresh kind bootstrap and smoke 10/10 with the patched image.
+PASS: 250/250 ingress health requests during a rolling update over 52.5 seconds;
+      no 502 responses, all three replacements ready. Helm/parity checks pass.

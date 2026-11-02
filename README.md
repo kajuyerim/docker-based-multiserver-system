@@ -65,7 +65,9 @@ server IDs. NGINX resolves the headless backend Service to individual ready Pod
 IPs, preserving round-robin routing and retries. Both backend probes call
 `/health`; as in Compose, this checks process health, not Redis availability.
 Rolling updates keep new pods ready for six seconds before retiring old ones,
-allowing NGINX's five-second DNS cache to discover their addresses.
+and retiring pods keep serving for ten seconds before SIGTERM so NGINX's
+five-second DNS cache can stop routing to them. The 30-second termination budget
+includes that delay, the backend's 12-second request drain, and trace flushing.
 The primary uses AOF on a PVC and a single-replica Recreate deployment; the reader
 is disposable and becomes ready after synchronization. There is no Redis promotion.
 
