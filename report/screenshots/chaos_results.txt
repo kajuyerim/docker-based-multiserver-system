@@ -1,0 +1,232 @@
+Chaos acceptance — 2026-11-02T10:34:31Z
+Five minutes, 8 HTTPS root requests/sec, 30-second failure intervals, 10-second outages.
+Each response must be HTTP 200 with valid counters and matching backend identity; 429 is a failure.
+Authentication: configured bearer token (withheld).
+Revision: 53fb5a0-dirty
+Backend image: sha256:a13b453fefbd1cf794b80297093b4e0fe153d3fd29f6f9fd0cf70c8da3217d48
+SHA256 scripts/chaos.sh d4af340ec68e34bc0176eb71ddbcabc312f4e5a2969c85bae4cd4494420bcef7
+SHA256 bench/chaos.js a17abd77a92694132b85e39376c4c4fee59f5cccf02c6a626fea42d77c22a696
+ Container multiserver-chaos-1793615671-301 Creating 
+ Container multiserver-chaos-1793615671-301 Created 
+t=30s: SIGKILL app2
+ Container docker-based-multiserver-system-app2-1 Killing 
+ Container docker-based-multiserver-system-app2-1 Killed 
+t=41s: restart app2
+ Container docker-based-multiserver-system-redis-1 Waiting 
+ Container docker-based-multiserver-system-redis-1 Healthy 
+ Container docker-based-multiserver-system-redis-replica-1 Waiting 
+ Container docker-based-multiserver-system-jaeger-1 Waiting 
+ Container docker-based-multiserver-system-redis-1 Waiting 
+ Container docker-based-multiserver-system-jaeger-1 Healthy 
+ Container docker-based-multiserver-system-redis-replica-1 Healthy 
+ Container docker-based-multiserver-system-redis-1 Healthy 
+ Container docker-based-multiserver-system-app2-1 Starting 
+ Container docker-based-multiserver-system-app2-1 Started 
+ Container docker-based-multiserver-system-redis-1 Waiting 
+ Container docker-based-multiserver-system-jaeger-1 Waiting 
+ Container docker-based-multiserver-system-redis-replica-1 Waiting 
+ Container docker-based-multiserver-system-app2-1 Waiting 
+ Container docker-based-multiserver-system-redis-1 Healthy 
+ Container docker-based-multiserver-system-jaeger-1 Healthy 
+ Container docker-based-multiserver-system-redis-replica-1 Healthy 
+ Container docker-based-multiserver-system-app2-1 Healthy 
+t=60s: SIGKILL app1
+ Container docker-based-multiserver-system-app1-1 Killing 
+ Container docker-based-multiserver-system-app1-1 Killed 
+t=70s: restart app1
+ Container docker-based-multiserver-system-redis-1 Waiting 
+ Container docker-based-multiserver-system-redis-1 Healthy 
+ Container docker-based-multiserver-system-jaeger-1 Waiting 
+ Container docker-based-multiserver-system-redis-1 Waiting 
+ Container docker-based-multiserver-system-redis-replica-1 Waiting 
+ Container docker-based-multiserver-system-redis-replica-1 Healthy 
+ Container docker-based-multiserver-system-redis-1 Healthy 
+ Container docker-based-multiserver-system-jaeger-1 Healthy 
+ Container docker-based-multiserver-system-app1-1 Starting 
+ Container docker-based-multiserver-system-app1-1 Started 
+ Container docker-based-multiserver-system-jaeger-1 Waiting 
+ Container docker-based-multiserver-system-redis-replica-1 Waiting 
+ Container docker-based-multiserver-system-redis-1 Waiting 
+ Container docker-based-multiserver-system-app1-1 Waiting 
+ Container docker-based-multiserver-system-redis-1 Healthy 
+ Container docker-based-multiserver-system-redis-replica-1 Healthy 
+ Container docker-based-multiserver-system-jaeger-1 Healthy 
+ Container docker-based-multiserver-system-app1-1 Healthy 
+t=91s: SIGKILL app1
+ Container docker-based-multiserver-system-app1-1 Killing 
+ Container docker-based-multiserver-system-app1-1 Killed 
+t=101s: restart app1
+ Container docker-based-multiserver-system-redis-1 Waiting 
+ Container docker-based-multiserver-system-redis-1 Healthy 
+ Container docker-based-multiserver-system-redis-replica-1 Waiting 
+ Container docker-based-multiserver-system-jaeger-1 Waiting 
+ Container docker-based-multiserver-system-redis-1 Waiting 
+ Container docker-based-multiserver-system-redis-replica-1 Healthy 
+ Container docker-based-multiserver-system-redis-1 Healthy 
+ Container docker-based-multiserver-system-jaeger-1 Healthy 
+ Container docker-based-multiserver-system-app1-1 Starting 
+ Container docker-based-multiserver-system-app1-1 Started 
+ Container docker-based-multiserver-system-redis-1 Waiting 
+ Container docker-based-multiserver-system-jaeger-1 Waiting 
+ Container docker-based-multiserver-system-app1-1 Waiting 
+ Container docker-based-multiserver-system-redis-replica-1 Waiting 
+ Container docker-based-multiserver-system-redis-1 Healthy 
+ Container docker-based-multiserver-system-redis-replica-1 Healthy 
+ Container docker-based-multiserver-system-jaeger-1 Healthy 
+ Container docker-based-multiserver-system-app1-1 Healthy 
+t=120s: SIGKILL app1
+ Container docker-based-multiserver-system-app1-1 Killing 
+ Container docker-based-multiserver-system-app1-1 Killed 
+t=130s: restart app1
+ Container docker-based-multiserver-system-redis-1 Waiting 
+ Container docker-based-multiserver-system-redis-1 Healthy 
+ Container docker-based-multiserver-system-redis-replica-1 Waiting 
+ Container docker-based-multiserver-system-jaeger-1 Waiting 
+ Container docker-based-multiserver-system-redis-1 Waiting 
+ Container docker-based-multiserver-system-redis-replica-1 Healthy 
+ Container docker-based-multiserver-system-jaeger-1 Healthy 
+ Container docker-based-multiserver-system-redis-1 Healthy 
+ Container docker-based-multiserver-system-app1-1 Starting 
+ Container docker-based-multiserver-system-app1-1 Started 
+ Container docker-based-multiserver-system-jaeger-1 Waiting 
+ Container docker-based-multiserver-system-redis-replica-1 Waiting 
+ Container docker-based-multiserver-system-redis-1 Waiting 
+ Container docker-based-multiserver-system-app1-1 Waiting 
+ Container docker-based-multiserver-system-jaeger-1 Healthy 
+ Container docker-based-multiserver-system-redis-replica-1 Healthy 
+ Container docker-based-multiserver-system-redis-1 Healthy 
+ Container docker-based-multiserver-system-app1-1 Healthy 
+t=150s: SIGKILL app1
+ Container docker-based-multiserver-system-app1-1 Killing 
+ Container docker-based-multiserver-system-app1-1 Killed 
+t=160s: restart app1
+ Container docker-based-multiserver-system-redis-1 Waiting 
+ Container docker-based-multiserver-system-redis-1 Healthy 
+ Container docker-based-multiserver-system-redis-replica-1 Waiting 
+ Container docker-based-multiserver-system-jaeger-1 Waiting 
+ Container docker-based-multiserver-system-redis-1 Waiting 
+ Container docker-based-multiserver-system-redis-replica-1 Healthy 
+ Container docker-based-multiserver-system-jaeger-1 Healthy 
+ Container docker-based-multiserver-system-redis-1 Healthy 
+ Container docker-based-multiserver-system-app1-1 Starting 
+ Container docker-based-multiserver-system-app1-1 Started 
+ Container docker-based-multiserver-system-jaeger-1 Waiting 
+ Container docker-based-multiserver-system-app1-1 Waiting 
+ Container docker-based-multiserver-system-redis-1 Waiting 
+ Container docker-based-multiserver-system-redis-replica-1 Waiting 
+ Container docker-based-multiserver-system-redis-1 Healthy 
+ Container docker-based-multiserver-system-redis-replica-1 Healthy 
+ Container docker-based-multiserver-system-jaeger-1 Healthy 
+ Container docker-based-multiserver-system-app1-1 Healthy 
+t=180s: SIGKILL app2
+ Container docker-based-multiserver-system-app2-1 Killing 
+ Container docker-based-multiserver-system-app2-1 Killed 
+t=190s: restart app2
+ Container docker-based-multiserver-system-redis-1 Waiting 
+ Container docker-based-multiserver-system-redis-1 Healthy 
+ Container docker-based-multiserver-system-jaeger-1 Waiting 
+ Container docker-based-multiserver-system-redis-1 Waiting 
+ Container docker-based-multiserver-system-redis-replica-1 Waiting 
+ Container docker-based-multiserver-system-redis-1 Healthy 
+ Container docker-based-multiserver-system-redis-replica-1 Healthy 
+ Container docker-based-multiserver-system-jaeger-1 Healthy 
+ Container docker-based-multiserver-system-app2-1 Starting 
+ Container docker-based-multiserver-system-app2-1 Started 
+ Container docker-based-multiserver-system-jaeger-1 Waiting 
+ Container docker-based-multiserver-system-app2-1 Waiting 
+ Container docker-based-multiserver-system-redis-replica-1 Waiting 
+ Container docker-based-multiserver-system-redis-1 Waiting 
+ Container docker-based-multiserver-system-redis-1 Healthy 
+ Container docker-based-multiserver-system-jaeger-1 Healthy 
+ Container docker-based-multiserver-system-redis-replica-1 Healthy 
+ Container docker-based-multiserver-system-app2-1 Healthy 
+t=210s: SIGKILL app1
+ Container docker-based-multiserver-system-app1-1 Killing 
+ Container docker-based-multiserver-system-app1-1 Killed 
+t=220s: restart app1
+ Container docker-based-multiserver-system-redis-1 Waiting 
+ Container docker-based-multiserver-system-redis-1 Healthy 
+ Container docker-based-multiserver-system-redis-replica-1 Waiting 
+ Container docker-based-multiserver-system-jaeger-1 Waiting 
+ Container docker-based-multiserver-system-redis-1 Waiting 
+ Container docker-based-multiserver-system-jaeger-1 Healthy 
+ Container docker-based-multiserver-system-redis-replica-1 Healthy 
+ Container docker-based-multiserver-system-redis-1 Healthy 
+ Container docker-based-multiserver-system-app1-1 Starting 
+ Container docker-based-multiserver-system-app1-1 Started 
+ Container docker-based-multiserver-system-jaeger-1 Waiting 
+ Container docker-based-multiserver-system-redis-1 Waiting 
+ Container docker-based-multiserver-system-redis-replica-1 Waiting 
+ Container docker-based-multiserver-system-app1-1 Waiting 
+ Container docker-based-multiserver-system-jaeger-1 Healthy 
+ Container docker-based-multiserver-system-redis-1 Healthy 
+ Container docker-based-multiserver-system-redis-replica-1 Healthy 
+ Container docker-based-multiserver-system-app1-1 Healthy 
+t=240s: SIGKILL app2
+ Container docker-based-multiserver-system-app2-1 Killing 
+ Container docker-based-multiserver-system-app2-1 Killed 
+t=250s: restart app2
+ Container docker-based-multiserver-system-redis-1 Waiting 
+ Container docker-based-multiserver-system-redis-1 Healthy 
+ Container docker-based-multiserver-system-redis-replica-1 Waiting 
+ Container docker-based-multiserver-system-jaeger-1 Waiting 
+ Container docker-based-multiserver-system-redis-1 Waiting 
+ Container docker-based-multiserver-system-redis-replica-1 Healthy 
+ Container docker-based-multiserver-system-jaeger-1 Healthy 
+ Container docker-based-multiserver-system-redis-1 Healthy 
+ Container docker-based-multiserver-system-app2-1 Starting 
+ Container docker-based-multiserver-system-app2-1 Started 
+ Container docker-based-multiserver-system-app2-1 Waiting 
+ Container docker-based-multiserver-system-redis-replica-1 Waiting 
+ Container docker-based-multiserver-system-jaeger-1 Waiting 
+ Container docker-based-multiserver-system-redis-1 Waiting 
+ Container docker-based-multiserver-system-redis-1 Healthy 
+ Container docker-based-multiserver-system-jaeger-1 Healthy 
+ Container docker-based-multiserver-system-redis-replica-1 Healthy 
+ Container docker-based-multiserver-system-app2-1 Healthy 
+t=270s: SIGKILL app3
+ Container docker-based-multiserver-system-app3-1 Killing 
+ Container docker-based-multiserver-system-app3-1 Killed 
+t=280s: restart app3
+ Container docker-based-multiserver-system-redis-1 Waiting 
+ Container docker-based-multiserver-system-redis-1 Healthy 
+ Container docker-based-multiserver-system-redis-1 Waiting 
+ Container docker-based-multiserver-system-redis-replica-1 Waiting 
+ Container docker-based-multiserver-system-jaeger-1 Waiting 
+ Container docker-based-multiserver-system-jaeger-1 Healthy 
+ Container docker-based-multiserver-system-redis-1 Healthy 
+ Container docker-based-multiserver-system-redis-replica-1 Healthy 
+ Container docker-based-multiserver-system-app3-1 Starting 
+ Container docker-based-multiserver-system-app3-1 Started 
+ Container docker-based-multiserver-system-redis-replica-1 Waiting 
+ Container docker-based-multiserver-system-app3-1 Waiting 
+ Container docker-based-multiserver-system-jaeger-1 Waiting 
+ Container docker-based-multiserver-system-redis-1 Waiting 
+ Container docker-based-multiserver-system-redis-1 Healthy 
+ Container docker-based-multiserver-system-jaeger-1 Healthy 
+ Container docker-based-multiserver-system-redis-replica-1 Healthy 
+ Container docker-based-multiserver-system-app3-1 Healthy 
+PASS: chaos_success: 2401/2401 = 100.00%
+PASS: chaos_success{window:0}: 240/240 = 100.00%
+PASS: chaos_success{window:1}: 240/240 = 100.00%
+PASS: chaos_success{window:2}: 240/240 = 100.00%
+PASS: chaos_success{window:3}: 240/240 = 100.00%
+PASS: chaos_success{window:4}: 240/240 = 100.00%
+PASS: chaos_success{window:5}: 240/240 = 100.00%
+PASS: chaos_success{window:6}: 240/240 = 100.00%
+PASS: chaos_success{window:7}: 240/240 = 100.00%
+PASS: chaos_success{window:8}: 240/240 = 100.00%
+PASS: chaos_success{window:9}: 241/241 = 100.00%
+PASS: full 300.012s, 2401 requests, zero dropped iterations.
+CHAOS_START=1793615671
+app1 healthy
+app2 healthy
+app3 healthy
+grafana healthy
+jaeger healthy
+nginx healthy
+prometheus healthy
+redis healthy
+redis-replica healthy
+
+Completed fault cycles: 9/9. Result: 0. Existing data and volumes retained.
