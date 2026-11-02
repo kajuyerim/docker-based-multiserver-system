@@ -12,6 +12,34 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  kubernetes:
+    name: Kubernetes deployment
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install kind and Helm
+        run: |
+          curl -fsSLo kind https://kind.sigs.k8s.io/dl/v0.33.0/kind-linux-amd64
+          chmod +x kind
+          sudo mv kind /usr/local/bin/kind
+          curl -fsSLo helm.tar.gz https://get.helm.sh/helm-v4.3.1-linux-amd64.tar.gz
+          tar -xzf helm.tar.gz
+          sudo mv linux-amd64/helm /usr/local/bin/helm
+      - name: Validate chart and manifests
+        run: ./scripts/check-k8s.sh
+      - name: Deploy and smoke test through ingress
+        run: ./scripts/deploy-kind.sh
+      - name: Kubernetes diagnostics
+        if: failure()
+        run: |
+          kind export kubeconfig --name multiserver
+          kubectl get pods -A
+          kubectl get events -A --sort-by=.lastTimestamp
+      - name: Remove test cluster
+        if: always()
+        run: kind delete cluster --name multiserver
+
   ci:
     name: vet + tests + stack acceptance + load
     runs-on: ubuntu-latest

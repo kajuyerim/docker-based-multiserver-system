@@ -1,0 +1,326 @@
+---
+# Source: multiserver/templates/config.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: multiserver-app
+data:
+  PORT: "8080"
+  REDIS_ADDR: multiserver-redis:6379
+  REDIS_READ_ADDR: multiserver-redis-replica:6379
+
+---
+# Source: multiserver/templates/config.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: multiserver-nginx
+data:
+  default.conf: |
+    map $uri $rate_limit_key {
+        default "";
+        / $binary_remote_addr;
+    }
+    limit_req_zone $rate_limit_key zone=root_requests:10m rate=10r/s;
+    resolver 10.96.0.10 valid=5s ipv6=off;
+    resolver_timeout 2s;
+    upstream backend {
+        zone backend 64k;
+        server multiserver-app.multiserver.svc.cluster.local:8080 resolve max_fails=1 fail_timeout=10s;
+    }
+    server {
+        listen 80;
+        server_name _;
+        limit_req_status 429;
+        error_page 429 = @rate_limited;
+        location @rate_limited {
+            default_type application/json;
+            add_header Retry-After 1 always;
+            add_header X-Request-Id $request_id always;
+            return 429 '{"error":"rate limit exceeded"}';
+        }
+        location / {
+            limit_req zone=root_requests burst=20 nodelay;
+            proxy_pass http://backend;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Request-Id $request_id;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_connect_timeout 2s;
+            proxy_send_timeout 5s;
+            proxy_read_timeout 15s;
+            proxy_next_upstream error timeout http_502 http_503 http_504;
+            proxy_next_upstream_tries 3;
+        }
+    }
+
+---
+# Source: multiserver/templates/redis.yaml
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: multiserver-redis
+  annotations:
+    helm.sh/resource-policy: keep
+spec:
+  accessModes: [ReadWriteOnce]
+  resources:
+    requests:
+      storage: 1Gi
+
+---
+# Source: multiserver/templates/app.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: multiserver-app
+spec:
+  clusterIP: None
+  selector: {app: multiserver-app}
+  ports: [{name: http, port: 8080, targetPort: http}]
+
+---
+# Source: multiserver/templates/nginx.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: multiserver-nginx
+spec:
+  selector: {app: multiserver-nginx}
+  ports: [{name: http, port: 80, targetPort: http}]
+
+---
+# Source: multiserver/templates/redis.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: multiserver-redis
+spec:
+  selector: {app: multiserver-redis}
+  ports: [{name: redis, port: 6379, targetPort: redis}]
+
+---
+# Source: multiserver/templates/redis.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: multiserver-redis-replica
+spec:
+  selector: {app: multiserver-redis-replica}
+  ports: [{name: redis, port: 6379, targetPort: redis}]
+
+---
+# Source: multiserver/templates/app.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: multiserver-app
+spec:
+  minReadySeconds: 6
+  selector:
+    matchLabels: {app: multiserver-app}
+  template:
+    metadata:
+      labels: {app: multiserver-app}
+      annotations:
+        checksum/config: 71bd6693d96de9b73c26af2866b12b7190bc732c941ac7d2f022fc9fed712301
+    spec:
+      terminationGracePeriodSeconds: 20
+      containers:
+        - name: app
+          image: "multiserver-app:local"
+          imagePullPolicy: IfNotPresent
+          ports: [{name: http, containerPort: 8080}]
+          envFrom:
+            - configMapRef: {name: multiserver-app}
+          env:
+            - name: SERVER_ID
+              valueFrom:
+                fieldRef: {fieldPath: metadata.name}
+          readinessProbe:
+            exec:
+              command: [sh, -ec, 'wget --spider --quiet --header="Authorization: Bearer ${AUTH_TOKEN:-}" http://127.0.0.1:8080/health']
+            periodSeconds: 2
+            timeoutSeconds: 2
+          livenessProbe:
+            exec:
+              command: [sh, -ec, 'wget --spider --quiet --header="Authorization: Bearer ${AUTH_TOKEN:-}" http://127.0.0.1:8080/health']
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 2
+          resources:
+            limits:
+              cpu: 500m
+              memory: 128Mi
+            requests:
+              cpu: 100m
+              memory: 64Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+            readOnlyRootFilesystem: true
+            seccompProfile: {type: RuntimeDefault}
+
+---
+# Source: multiserver/templates/nginx.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: multiserver-nginx
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: multiserver-nginx}
+  template:
+    metadata:
+      labels: {app: multiserver-nginx}
+      annotations:
+        checksum/config: 71bd6693d96de9b73c26af2866b12b7190bc732c941ac7d2f022fc9fed712301
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:1.27.5-alpine
+          ports: [{name: http, containerPort: 80}]
+          volumeMounts:
+            - {name: config, mountPath: /etc/nginx/conf.d, readOnly: true}
+          readinessProbe:
+            exec:
+              command: [sh, -ec, 'wget --spider --quiet --header="Authorization: Bearer ${AUTH_TOKEN:-}" http://127.0.0.1/health']
+            periodSeconds: 2
+            timeoutSeconds: 3
+          livenessProbe:
+            tcpSocket: {port: http}
+            periodSeconds: 10
+          resources:
+            limits:
+              cpu: 250m
+              memory: 64Mi
+            requests:
+              cpu: 50m
+              memory: 32Mi
+      volumes:
+        - name: config
+          configMap: {name: multiserver-nginx}
+
+---
+# Source: multiserver/templates/redis.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: multiserver-redis
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector:
+    matchLabels: {app: multiserver-redis}
+  template:
+    metadata:
+      labels: {app: multiserver-redis}
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          args: [redis-server, --appendonly, "yes", --appendfsync, everysec]
+          volumeMounts: [{name: data, mountPath: /data}]
+          ports: [{name: redis, containerPort: 6379}]
+          readinessProbe:
+            exec:
+              command: [sh, -ec, 'test "$(redis-cli ping)" = PONG']
+            periodSeconds: 2
+            timeoutSeconds: 2
+          livenessProbe:
+            exec:
+              command: [redis-cli, ping]
+            periodSeconds: 10
+            timeoutSeconds: 2
+          resources:
+            limits:
+              cpu: 500m
+              memory: 256Mi
+            requests:
+              cpu: 100m
+              memory: 64Mi
+      volumes:
+        - name: data
+          persistentVolumeClaim: {claimName: multiserver-redis}
+
+---
+# Source: multiserver/templates/redis.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: multiserver-redis-replica
+spec:
+  replicas: 1
+  strategy: {type: Recreate}
+  selector:
+    matchLabels: {app: multiserver-redis-replica}
+  template:
+    metadata:
+      labels: {app: multiserver-redis-replica}
+    spec:
+      containers:
+        - name: redis
+          image: redis:7-alpine
+          args: [redis-server, --replicaof, multiserver-redis, "6379", --replica-read-only, "yes", --replica-serve-stale-data, "no"]
+          ports: [{name: redis, containerPort: 6379}]
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -ec
+                - |
+                  info=$(redis-cli --raw INFO replication)
+                  echo "$info" | tr -d '\r' | grep -qx 'master_link_status:up'
+                  echo "$info" | tr -d '\r' | grep -qx 'master_sync_in_progress:0'
+            periodSeconds: 2
+            timeoutSeconds: 2
+          livenessProbe:
+            exec:
+              command: [redis-cli, ping]
+            periodSeconds: 10
+            timeoutSeconds: 2
+          resources:
+            limits:
+              cpu: 500m
+              memory: 256Mi
+            requests:
+              cpu: 100m
+              memory: 64Mi
+
+---
+# Source: multiserver/templates/app.yaml
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: multiserver-app
+spec:
+  scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: multiserver-app}
+  minReplicas: 3
+  maxReplicas: 6
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+
+---
+# Source: multiserver/templates/nginx.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: multiserver
+spec:
+  ingressClassName: traefik
+  rules:
+    -
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: multiserver-nginx
+                port: {name: http}
