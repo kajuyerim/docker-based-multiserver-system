@@ -28,7 +28,8 @@ paths:
         Increments the local counter and the shared Redis global_count using
         atomic INCR. NGINX rate limits this path at 10 requests per second per
         client IP, with a burst of 20 requests served immediately. Query
-        strings do not change which limiter applies.
+        strings do not change which limiter applies. Only GET increments
+        counters; other methods return 405 before touching counters.
       responses:
         '200':
           description: Both counters were incremented.
@@ -43,6 +44,24 @@ paths:
                 $ref: '#/components/schemas/RootResponse'
         '401':
           $ref: '#/components/responses/Unauthorized'
+        '405':
+          description: Method is not GET; counters were not changed.
+          headers:
+            Allow:
+              description: The only supported method for this path.
+              schema:
+                type: string
+                enum: [GET]
+            X-Server-Id:
+              $ref: '#/components/headers/ServerId'
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: method not allowed
         '429':
           description: NGINX rate limit exceeded; request did not reach a backend.
           headers:
@@ -229,6 +248,62 @@ paths:
                 multiserver_local_count{server_id="app1"} 0
         '401':
           $ref: '#/components/responses/Unauthorized'
+  /events:
+    get:
+      tags: [API]
+      operationId: subscribeCounterEvents
+      summary: Subscribe to root counter updates over WebSocket
+      description: >-
+        This HTTP operation documents the WebSocket handshake; OpenAPI does not
+        model the messages sent after upgrade. Successful upgrades send JSON
+        text frames with this shape: `{"global_count": 42}`. Each successful
+        application GET / publishes its new count on the primary Redis
+        `counter_updates` channel, so subscribers on every backend replica can
+        receive it. Delivery is best effort with no replay: direct Redis writes
+        are not watched, concurrent notifications may arrive out of order, and
+        Redis outages may lose notifications while persisted counter values
+        remain. Ping frames are sent every 20 seconds; writes have a five-second
+        timeout, and backend shutdown disconnects clients. Browser WebSocket
+        clients can use same-origin connections only when auth is disabled,
+        because browser APIs cannot set a custom Authorization header.
+      responses:
+        '101':
+          description: WebSocket protocol upgrade accepted.
+          headers:
+            Upgrade:
+              description: Accepted protocol upgrade.
+              schema:
+                type: string
+                example: websocket
+            X-Server-Id:
+              $ref: '#/components/headers/ServerId'
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: WebSocket origin validation rejected the request; protocol rejection body is not guaranteed to be JSON.
+        '426':
+          description: The request did not include a valid WebSocket upgrade; protocol rejection body is not guaranteed to be JSON.
+          headers:
+            Upgrade:
+              description: Required upgrade protocol.
+              schema:
+                type: string
+                example: websocket
+        '503':
+          description: Redis subscription could not be established; this failure uses the JSON API error format.
+          headers:
+            X-Server-Id:
+              $ref: '#/components/headers/ServerId'
+            X-Request-Id:
+              $ref: '#/components/headers/RequestId'
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                error: event stream unavailable
 components:
   securitySchemes:
     bearerAuth:
