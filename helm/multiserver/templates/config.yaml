@@ -1,0 +1,51 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-app
+data:
+  PORT: "8080"
+  REDIS_ADDR: {{ .Release.Name }}-redis:6379
+  REDIS_READ_ADDR: {{ .Release.Name }}-redis-replica:6379
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-nginx
+data:
+  default.conf: |
+    map $uri $rate_limit_key {
+        default "";
+        / $binary_remote_addr;
+    }
+    limit_req_zone $rate_limit_key zone=root_requests:10m rate=10r/s;
+    resolver {{ .Values.dnsResolver }} valid=5s ipv6=off;
+    resolver_timeout 2s;
+    upstream backend {
+        zone backend 64k;
+        server {{ .Release.Name }}-app.{{ .Release.Namespace }}.svc.{{ .Values.clusterDomain }}:8080 resolve max_fails=1 fail_timeout=10s;
+    }
+    server {
+        listen 80;
+        server_name _;
+        limit_req_status 429;
+        error_page 429 = @rate_limited;
+        location @rate_limited {
+            default_type application/json;
+            add_header Retry-After 1 always;
+            add_header X-Request-Id $request_id always;
+            return 429 '{"error":"rate limit exceeded"}';
+        }
+        location / {
+            limit_req zone=root_requests burst=20 nodelay;
+            proxy_pass http://backend;
+            proxy_http_version 1.1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Request-Id $request_id;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_connect_timeout 2s;
+            proxy_send_timeout 5s;
+            proxy_read_timeout 15s;
+            proxy_next_upstream error timeout http_502 http_503 http_504;
+            proxy_next_upstream_tries 3;
+        }
+    }

@@ -1,0 +1,79 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-app
+spec:
+  minReadySeconds: 6
+  {{- if not .Values.autoscaling.enabled }}
+  replicas: {{ .Values.replicaCount }}
+  {{- end }}
+  selector:
+    matchLabels: {app: {{ .Release.Name }}-app}
+  template:
+    metadata:
+      labels: {app: {{ .Release.Name }}-app}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/config.yaml") . | sha256sum }}
+    spec:
+      terminationGracePeriodSeconds: 20
+      containers:
+        - name: app
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports: [{name: http, containerPort: 8080}]
+          envFrom:
+            - configMapRef: {name: {{ .Release.Name }}-app}
+          env:
+            - name: SERVER_ID
+              valueFrom:
+                fieldRef: {fieldPath: metadata.name}
+            {{- if .Values.authSecret }}
+            - name: AUTH_TOKEN
+              valueFrom:
+                secretKeyRef: {name: {{ .Values.authSecret }}, key: AUTH_TOKEN}
+            {{- end }}
+          readinessProbe:
+            exec:
+              command: [sh, -ec, 'wget --spider --quiet --header="Authorization: Bearer ${AUTH_TOKEN:-}" http://127.0.0.1:8080/health']
+            periodSeconds: 2
+            timeoutSeconds: 2
+          livenessProbe:
+            exec:
+              command: [sh, -ec, 'wget --spider --quiet --header="Authorization: Bearer ${AUTH_TOKEN:-}" http://127.0.0.1:8080/health']
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 2
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities: {drop: [ALL]}
+            readOnlyRootFilesystem: true
+            seccompProfile: {type: RuntimeDefault}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-app
+spec:
+  clusterIP: None
+  selector: {app: {{ .Release.Name }}-app}
+  ports: [{name: http, port: 8080, targetPort: http}]
+{{- if .Values.autoscaling.enabled }}
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ .Release.Name }}-app
+spec:
+  scaleTargetRef: {apiVersion: apps/v1, kind: Deployment, name: {{ .Release.Name }}-app}
+  minReplicas: {{ .Values.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.autoscaling.maxReplicas }}
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: {{ .Values.autoscaling.targetCPUUtilizationPercentage }}
+{{- end }}

@@ -1,0 +1,71 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Release.Name }}-nginx
+spec:
+  replicas: 1
+  selector:
+    matchLabels: {app: {{ .Release.Name }}-nginx}
+  template:
+    metadata:
+      labels: {app: {{ .Release.Name }}-nginx}
+      annotations:
+        checksum/config: {{ include (print $.Template.BasePath "/config.yaml") . | sha256sum }}
+    spec:
+      containers:
+        - name: nginx
+          image: {{ .Values.nginxImage }}
+          ports: [{name: http, containerPort: 80}]
+          {{- if .Values.authSecret }}
+          env:
+            - name: AUTH_TOKEN
+              valueFrom:
+                secretKeyRef: {name: {{ .Values.authSecret }}, key: AUTH_TOKEN}
+          {{- end }}
+          volumeMounts:
+            - {name: config, mountPath: /etc/nginx/conf.d, readOnly: true}
+          readinessProbe:
+            exec:
+              command: [sh, -ec, 'wget --spider --quiet --header="Authorization: Bearer ${AUTH_TOKEN:-}" http://127.0.0.1/health']
+            periodSeconds: 2
+            timeoutSeconds: 3
+          livenessProbe:
+            tcpSocket: {port: http}
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.nginxResources | nindent 12 }}
+      volumes:
+        - name: config
+          configMap: {name: {{ .Release.Name }}-nginx}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Release.Name }}-nginx
+spec:
+  selector: {app: {{ .Release.Name }}-nginx}
+  ports: [{name: http, port: 80, targetPort: http}]
+{{- if .Values.ingress.enabled }}
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ .Release.Name }}
+spec:
+  ingressClassName: {{ .Values.ingress.className }}
+  {{- if .Values.ingress.tlsSecret }}
+  tls:
+    - secretName: {{ .Values.ingress.tlsSecret }}
+      hosts: [{{ required "ingress.host is required for TLS" .Values.ingress.host | quote }}]
+  {{- end }}
+  rules:
+    -{{ if .Values.ingress.host }} host: {{ .Values.ingress.host | quote }}{{ end }}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ .Release.Name }}-nginx
+                port: {name: http}
+{{- end }}

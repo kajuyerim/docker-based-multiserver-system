@@ -1,0 +1,6 @@
+apiVersion: v2
+name: multiserver
+description: NGINX, Go backends, and persistent Redis with a read replica
+type: application
+version: 0.1.0
+appVersion: "0.4.0"
