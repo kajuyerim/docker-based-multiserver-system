@@ -38,6 +38,7 @@ export class Experiment {
   readonly definition: Scenario;
   private observedPressure = false;
   private observedDrain = false;
+  private observationStart?: number;
   private lastTime = -1;
   private completed = false;
   private evidence = '';
@@ -60,7 +61,16 @@ export class Experiment {
       if (id === 'scaling' && snapshot.backends.length === 1 && metrics.queue > 20) this.observedPressure = true;
       if (id === 'redis' && snapshot.redis.queue > 60 && metrics.redisUtilization > 0.9) this.observedPressure = true;
       if (id === 'drain' && b?.state === 'draining' && b.inFlight > 0) this.observedDrain = true;
-      const enough = metrics.windowSeconds >= 4 && metrics.samples >= 50;
+      const interventionObserved =
+        (id === 'scaling' && this.observedPressure && snapshot.backends.filter(b => b.state === 'running').length >= 3) ||
+        (id === 'outage' && b?.state === 'stopped' && snapshot.config.retry && snapshot.totals.retried > 0) ||
+        (id === 'drain' && this.observedDrain && b?.state === 'stopped' && b.withdrawn && b.inFlight === 0) ||
+        (id === 'redis' && this.observedPressure && snapshot.config.redisIncrMs <= 2 && snapshot.config.redisPublishMs <= 1);
+      if (interventionObserved) this.observationStart ??= snapshot.now;
+      else this.observationStart = undefined;
+      const postInterventionWindow = this.observationStart !== undefined &&
+        snapshot.now - metrics.windowSeconds * SECOND >= this.observationStart;
+      const enough = postInterventionWindow && metrics.windowSeconds >= 4 && metrics.samples >= 50;
       let passed = false;
       if (enough && id === 'scaling') passed = this.observedPressure && snapshot.backends.filter(b => b.state === 'running').length >= 3 && metrics.successRate > 110 && metrics.queue < 10;
       if (enough && id === 'outage') passed = b?.state === 'stopped' && snapshot.config.retry && snapshot.totals.retried > 0 && snapshot.totals.failed === 0 && metrics.successRate > 55;

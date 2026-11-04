@@ -82,6 +82,20 @@ describe('commit, acknowledgment, and deadline boundaries', () => {
     expect(s.scheduledEvents).toBe(0);
   });
 
+  it('keeps the originating attempt on detached Redis events after retry or client termination', () => {
+    for (const retry of [true, false]) {
+      const engine = oneRoot({ redisIncrMs: 100, retry });
+      engine.command({ type: 'restart', backend: 1 }, 51);
+      engine.runFor(1.4);
+      const events = engine.snapshot().traces[0]!.events;
+      const sent = events.find(event => event.kind === 'redis-send')!;
+      const operationEvents = events.filter(event => event.operation === sent.operation);
+      expect(operationEvents.some(event => event.kind === 'redis-commit')).toBe(true);
+      expect(operationEvents.every(event => event.attempt === sent.attempt && event.request === 1)).toBe(true);
+      expect(events.filter(event => event.kind === 'terminal')).toHaveLength(1);
+    }
+  });
+
   it('enforces the twelve-second drain budget when admitted work exceeds it', () => {
     const engine = new Engine({ replicas: 1, capacity: 5, rate: 500, inFlightLimit: 256, jitter: 0 });
     engine.runFor(0.5);
@@ -94,5 +108,26 @@ describe('commit, acknowledgment, and deadline boundaries', () => {
     expect(s.totals.failed).toBeGreaterThan(0);
     expect(s.events.some(e => e.kind === 'attempt-failed' && e.message.includes('connection lost'))).toBe(true);
     expect(s.totals.offered).toBe(s.totals.succeeded + s.totals.failed);
+  });
+
+  it('removes a stopped backend with several connecting retries without stranding requests', () => {
+    const engine = new Engine({ rate: 100, slowPercent: 100, slowSeconds: 10, jitter: 0 });
+    engine.runFor(1);
+    engine.command({ type: 'stop', backend: 1 });
+    engine.command({ type: 'stop', backend: 2 });
+    engine.command({ type: 'remove', backend: 2 });
+    engine.command({ type: 'traffic', rate: 0 });
+    engine.runFor(0.02);
+    const removed = engine.snapshot();
+    expect(removed.commands.every(command => command.applied)).toBe(true);
+    expect(removed.backends.map(backend => backend.id)).toEqual([1, 3]);
+    expect(removed.requests.every(request => request.backend !== undefined)).toBe(true);
+
+    engine.runFor(12);
+    const settled = engine.snapshot();
+    expect(settled.requests).toHaveLength(0);
+    expect(settled.totals.failed).toBe(0);
+    expect(settled.totals.succeeded).toBe(settled.totals.offered);
+    expect(settled.scheduledEvents).toBe(0);
   });
 });

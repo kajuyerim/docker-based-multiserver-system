@@ -81,14 +81,23 @@ export function compareRuns(baseline: RecordedRun, candidate: RecordedRun): Comp
   for (const key of Object.keys(baseline.initialConfig) as (keyof Config)[]) {
     if (baseline.initialConfig[key] !== candidate.initialConfig[key]) changes.push(`${key}: ${baseline.initialConfig[key]} → ${candidate.initialConfig[key]}`);
   }
-  const encode = (c: RecordedCommand) => `${(c.tick * TICK_US / SECOND).toFixed(2)} s: ${JSON.stringify(c.command)}`;
-  const remaining = baseline.commands.map(encode);
-  for (const command of candidate.commands.map(encode)) {
-    const match = remaining.indexOf(command);
-    if (match >= 0) remaining.splice(match, 1);
-    else changes.push(`Added ${command}`);
+  const groupByTick = (commands: RecordedCommand[]) => {
+    const groups = new Map<number, string[]>();
+    for (const command of commands) {
+      const group = groups.get(command.tick) ?? [];
+      group.push(JSON.stringify(command.command));
+      groups.set(command.tick, group);
+    }
+    return groups;
+  };
+  const before = groupByTick(baseline.commands), after = groupByTick(candidate.commands);
+  const ticks = [...new Set([...before.keys(), ...after.keys()])].sort((a, b) => a - b);
+  for (const tick of ticks) {
+    const previous = before.get(tick) ?? [], next = after.get(tick) ?? [];
+    if (JSON.stringify(previous) !== JSON.stringify(next)) {
+      changes.push(`${(tick * TICK_US / SECOND).toFixed(2)} s execution order: [${previous.join('; ')}] → [${next.join('; ')}]`);
+    }
   }
-  for (const command of remaining) changes.push(`Removed ${command}`);
   let reason = '';
   if (baseline.invalidReason || candidate.invalidReason) reason = baseline.invalidReason ?? candidate.invalidReason!;
   else if (baseline.version !== candidate.version) reason = 'Model versions differ.';

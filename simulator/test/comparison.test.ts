@@ -35,6 +35,31 @@ it('isolates a capacity change while preserving the exact offered stream', () =>
   expect(comparison.delta!.averageQueue).toBeLessThan(0);
 });
 
+it('reports reordered interventions at the same tick when their outcomes differ', () => {
+  const commands = (values: number[]) => values.map(value => ({
+    tick: 50, command: { type: 'capacity' as const, backend: 1, value },
+  }));
+  const baseline = record({ replicas: 1, rate: 70, jitter: 0 }, commands([100, 20]));
+  const candidate = record({ replicas: 1, rate: 70, jitter: 0 }, commands([20, 100]));
+  const comparison = compareRuns(baseline, candidate);
+  expect(comparison.comparable).toBe(true);
+  expect(comparison.delta!.successRate).toBeGreaterThan(40);
+  expect(comparison.changes).toHaveLength(1);
+  expect(comparison.changes[0]).toContain('1.00 s');
+  expect(comparison.changes[0]).toContain('execution order');
+});
+
+it('compares execution order rather than the order future commands were recorded', () => {
+  const commands = [
+    { tick: 50, command: { type: 'capacity' as const, backend: 1, value: 100 } },
+    { tick: 100, command: { type: 'capacity' as const, backend: 1, value: 20 } },
+  ];
+  const comparison = compareRuns(record({}, commands), record({}, [...commands].reverse()));
+  expect(comparison.comparable).toBe(true);
+  expect(comparison.changes).toEqual([]);
+  expect(Object.values(comparison.delta!).every(value => value === 0)).toBe(true);
+});
+
 it('rejects incomplete windows, mismatched seeds, traffic, versions, and observation windows', () => {
   const engine = new Engine();
   const recorder = new RunRecorder();

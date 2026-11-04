@@ -327,7 +327,8 @@ export class Engine {
       const attempt = this.attempts.get(task.attempt)!;
       const r = this.requests.get(attempt.request)!;
       if (task.response) {
-        this.emit('response', `app${b.id} sends ${task.outcome === 'success' ? '200' : '500'}`, r, b.id);
+        const response = task.outcome === 'success' ? 'HTTP 200' : task.outcome === 'http_500' ? 'HTTP 500' : 'a model admission rejection';
+        this.emit('response', `app${b.id} sends ${response}`, r, b.id);
         this.afterAttempt(attempt, 1000, () => {
           b.completed++;
           this.release(attempt);
@@ -518,6 +519,8 @@ export class Engine {
       b.state = 'stopped';
       this.emit('drained', `app${b.id} finished all admitted work`, undefined, b.id);
       if (b.removing) {
+        // Releasing pending attempts must not recursively finalize this removal.
+        b.removing = false;
         // Refused connections still carry the removed upstream identity until their retry decision.
         for (const a of [...this.attempts.values()]) if (a.backend === b.id) this.failAttempt(a, 'upstream removed');
         this.backends = this.backends.filter(candidate => candidate.id !== b.id);
@@ -536,8 +539,10 @@ export class Engine {
     op.events.add(event);
   }
   private emit(kind: string, message: string, request?: Request, backend?: number, operation?: number, requestId = request?.id): void {
+    const origin = operation === undefined ? undefined : this.operations.get(operation);
+    requestId = origin?.request ?? requestId;
     const event: SemanticEvent = { sequence: ++this.sequence, at: this.now, kind, message,
-      request: requestId, attempt: request?.attempt || undefined, backend, operation };
+      request: requestId, attempt: origin?.attempt ?? (request?.attempt || undefined), backend, operation };
     this.events.push(event);
     if (this.events.length > LIMITS.events) this.events.shift();
     const trace = requestId === undefined ? undefined : this.traces.get(requestId) ?? (this.pinnedTrace?.id === requestId ? this.pinnedTrace : undefined);
