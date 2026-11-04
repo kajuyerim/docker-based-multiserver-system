@@ -250,3 +250,17 @@ describe('replay and bounds', () => {
     settle(engine, 30);
   });
 });
+
+it('preserves one selected request trace through completion without changing outcomes', () => {
+  const engine = new Engine({ rate: 100, slowPercent: 100, slowSeconds: 5 });
+  const reference = new Engine({ rate: 100, slowPercent: 100, slowSeconds: 5 });
+  engine.runFor(0.2); reference.runFor(0.2);
+  expect(engine.pinTrace(1)).toBe(true);
+  engine.runFor(6); reference.runFor(6);
+  const s = engine.snapshot();
+  expect(s.traces.find(t => t.id === 1)!.outcome).toBe('success');
+  expect(s.traces.find(t => t.id === 1)!.events.at(-1)!.kind).toBe('terminal');
+  expect(s.traces.length).toBeLessThanOrEqual(LIMITS.traces + 1);
+  expect(s.totals).toEqual(reference.snapshot().totals);
+  expect(s.workloadHash).toBe(reference.snapshot().workloadHash);
+});

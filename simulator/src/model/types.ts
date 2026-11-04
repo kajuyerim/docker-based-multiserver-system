@@ -98,5 +98,6 @@ export interface SnapshotData {
   pendingCommands: number;
   scheduledEvents: number;
   workloadHash: number;
+  accounting: { queueAreaUs: number; queuePeak: number; cpuBusyUs: number; cpuSlotsUs: number };
 }
 export type Snapshot = DeepReadonly<SnapshotData>;

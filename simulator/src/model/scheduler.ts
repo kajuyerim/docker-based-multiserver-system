@@ -20,6 +20,8 @@ export class Scheduler {
   private heap: Event[] = [];
   private positions = new Map<number, number>();
 
+  constructor(private readonly onAdvance: (elapsed: number) => void = () => {}) {}
+
   get size(): number { return this.heap.length; }
 
   schedule(at: number, priority: number, run: () => void): number {
@@ -41,9 +43,11 @@ export class Scheduler {
     while (this.heap[0] && this.heap[0].at <= time) {
       const next = this.heap[0];
       this.remove(0);
+      this.onAdvance(next.at - this.now);
       this.now = next.at;
       next.run();
     }
+    this.onAdvance(time - this.now);
     this.now = time;
   }
 

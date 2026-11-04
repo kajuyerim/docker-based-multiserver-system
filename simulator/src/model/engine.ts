@@ -34,7 +34,7 @@ function freeze<T>(value: T): T {
 }
 
 export class Engine {
-  private scheduler = new Scheduler();
+  private scheduler = new Scheduler(elapsed => this.accountResources(elapsed));
   private config: Config;
   private initialConfig: Config;
   private backends: Backend[] = [];
@@ -49,6 +49,7 @@ export class Engine {
     rejected: 0, localEntries: 0, globalCount: 0, publishFailures: 0 };
   private events: SemanticEvent[] = [];
   private traces = new Map<number, Trace>();
+  private pinnedTrace?: Trace;
   private completions: Completion[] = [];
   private commands: RecordedCommand[] = [];
   private pendingCommands = 0;
@@ -59,6 +60,10 @@ export class Engine {
   private roundRobin = 0;
   private arrivalEvent?: number;
   private workloadHash = 2166136261;
+  private queueAreaUs = 0;
+  private queuePeak = 0;
+  private cpuBusyUs = 0;
+  private cpuSlotsUs = 0;
 
   constructor(overrides: Partial<Config> = {}) {
     this.config = makeConfig(overrides);
@@ -97,6 +102,13 @@ export class Engine {
     });
   }
 
+  pinTrace(id: number): boolean {
+    const trace = this.traces.get(id) ?? (this.pinnedTrace?.id === id ? this.pinnedTrace : undefined);
+    if (!trace) return false;
+    this.pinnedTrace = trace;
+    return true;
+  }
+
   snapshot(): Snapshot {
     const backends: BackendSnapshot[] = this.backends.map(b => {
       const requests = [...b.members].map(id => this.requests.get(this.attempts.get(id)!.request));
@@ -121,10 +133,20 @@ export class Engine {
         busyUs: this.redisBusyUs + (this.redisActive !== undefined ? this.now - this.redisStart : 0) },
       completions: this.completions.map(c => ({ ...c })),
       events: this.events.map(e => ({ ...e })),
-      traces: [...this.traces.values()].map(t => ({ ...t, events: t.events.map(e => ({ ...e })) })),
+      traces: [...this.traces.values(), ...(this.pinnedTrace && !this.traces.has(this.pinnedTrace.id) ? [this.pinnedTrace] : [])].map(t => ({ ...t, events: t.events.map(e => ({ ...e })) })),
       commands: structuredClone(this.commands), pendingCommands: this.pendingCommands,
       scheduledEvents: this.scheduler.size, workloadHash: this.workloadHash,
+      accounting: { queueAreaUs: this.queueAreaUs, queuePeak: this.queuePeak,
+        cpuBusyUs: this.cpuBusyUs, cpuSlotsUs: this.cpuSlotsUs },
     });
+  }
+
+  private accountResources(elapsed: number): void {
+    const queue = this.backends.reduce((sum, b) => sum + b.queue.length, this.redisQueue.length);
+    this.queuePeak = Math.max(this.queuePeak, queue);
+    this.queueAreaUs += queue * elapsed;
+    this.cpuSlotsUs += this.backends.length * elapsed;
+    this.cpuBusyUs += this.backends.filter(b => b.active).length * elapsed;
   }
 
   private validateCommand(command: Command): void {
@@ -440,7 +462,7 @@ export class Engine {
     if (outcome === 'model_admission_rejected') this.totals.rejected++;
     this.completions.push({ id: r.id, at: this.now, latencyUs: this.now - r.createdAt,
       outcome, attempts: r.tried.length, backend });
-    const trace = this.traces.get(r.id);
+    const trace = this.traces.get(r.id) ?? (this.pinnedTrace?.id === r.id ? this.pinnedTrace : undefined);
     if (trace) { trace.finishedAt = this.now; trace.outcome = outcome; }
     this.emit('terminal', `Client result: ${outcome}`, r, backend);
   }
@@ -508,7 +530,7 @@ export class Engine {
       request: requestId, attempt: request?.attempt || undefined, backend, operation };
     this.events.push(event);
     if (this.events.length > LIMITS.events) this.events.shift();
-    const trace = requestId === undefined ? undefined : this.traces.get(requestId);
+    const trace = requestId === undefined ? undefined : this.traces.get(requestId) ?? (this.pinnedTrace?.id === requestId ? this.pinnedTrace : undefined);
     if (trace && trace.events.length < LIMITS.traceEvents) trace.events.push(event);
   }
 }
