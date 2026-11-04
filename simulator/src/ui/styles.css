@@ -144,3 +144,16 @@ dialog > button { margin-top: 17px; border-color: #a0afb6; }
 #comparison-result li { font: 10px/1.7 var(--mono); overflow-wrap: anywhere; }
 .comparison-error { color: #a3443b; font-size: 11px; margin: 12px 0; }
 @media(max-width: 760px) { .comparison-panel { top: 150px; left: 6px; right: 6px; width: auto; max-height: calc(100dvh - 225px); padding: 12px; } }
+@media (max-width: 760px) {
+  .traffic-panel { top: 138px; right: 6px; width: auto; display: grid; grid-template-columns: 1fr 1fr; column-gap: 24px; max-height: calc(100dvh - 230px); }
+  .traffic-panel .panel-heading { grid-column: 1 / -1; padding-bottom: 7px; }
+  .traffic-panel > .control { margin: 8px 0; }
+  .traffic-panel .range-ends { display: none; }
+  .traffic-panel > details { align-self: center; }
+  .traffic-panel > details[open] { grid-column: 1 / -1; }
+  .inspect-picker { margin: 0; padding: 0; border: 0; grid-column: 2; }
+  .inspect-picker label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }
+  .inspect-picker select { padding: 2px; min-height: 24px; }
+  .inspector, .comparison-panel { top: 280px; max-height: calc(100dvh - 350px); }
+  .inspector { width: min(300px, calc(100vw - 12px)); }
+}

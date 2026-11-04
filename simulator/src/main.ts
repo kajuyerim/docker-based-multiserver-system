@@ -47,12 +47,12 @@ $('app').innerHTML = `
   </aside>
   <aside id="inspector-panel" class="inspector overlay" aria-label="Component inspector" hidden><div class="panel-heading"><h2>INSPECTOR</h2><button id="close-inspector" aria-label="Close inspector">×</button></div><nav id="component-nav" class="component-nav" aria-label="Inspect a component"></nav><div id="inspector-body"></div></aside>
   <div class="scene-caption"><span>NGINX / GO / REDIS</span><p>Click a component to inspect its state.</p></div>
-  <div class="scene-legend" aria-label="Scene legend"><span><i style="background:#73acb3"></i>Active</span><span><i style="background:#c8ad72"></i>Queueing</span><span><i style="background:#8e8fc6"></i>Draining</span><span><i style="background:#ba7972"></i>Stopped</span><span>≤200 sampled flow markers</span></div>
+  <div class="scene-legend" aria-label="Scene legend"><span><i style="background:#287f83"></i>Active</span><span><i style="background:#b88029"></i>Queueing</span><span><i style="background:#7763a3"></i>Draining</span><span><i style="background:#a64a42"></i>Stopped</span><span>≤200 sampled flow markers</span><span id="render-rate"></span></div>
   <section id="experiment-panel" class="experiment-panel overlay" aria-label="Guided experiment" hidden><div><h2 id="experiment-title"></h2><p id="experiment-setup"></p><p id="experiment-goal"></p><p id="experiment-evidence"></p></div><div class="experiment-actions"><button id="experiment-action"></button><button id="experiment-reset">Reset experiment</button><button id="experiment-exit">Free running</button></div></section>
   <p id="feedback" class="feedback" role="status" aria-live="polite">Ready. Change the workload or select a component.</p>
   <footer class="transport-bar" aria-label="Playback">
     <div class="transport-controls"><button id="pause">Ⅱ Pause</button><button id="step">Step</button><label class="sr-only" for="speed">Playback speed</label><select id="speed"><option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select><button id="reset">↻ Reset</button><button id="fresh-settings">Run current settings</button></div>
-    <div class="transport-context"><label for="scenario">EXPERIMENT</label><select id="scenario"><option value="">Free running</option>${SCENARIOS.map(s => `<option value="${s.id}">${s.title}</option>`).join('')}</select><span id="metric-window">5 s rolling window</span></div><a href="https://github.com/kajuyerim/docker-based-multiserver-system/blob/main/simulator/MODEL.md" target="_blank" rel="noreferrer">Model ${MODEL_VERSION} ↗</a>
+    <div class="transport-context"><label for="scenario">EXPERIMENT</label><select id="scenario"><option value="">Free running</option>${SCENARIOS.map(s => `<option value="${s.id}">${s.title}</option>`).join('')}</select><span id="metric-window">5 s rolling window</span></div><a href="${import.meta.env.BASE_URL}model.txt" target="_blank" rel="noreferrer">Model ${MODEL_VERSION} ↗</a>
   </footer>
   <section id="comparison-panel" class="comparison-panel overlay" aria-label="Baseline comparison" hidden></section>
   <section id="diagnostics" class="diagnostics overlay" aria-label="Simulation console" hidden><div class="panel-heading"><h2>CONSOLE</h2><button id="close-diagnostics" aria-label="Close console">×</button></div><div class="console-grid">
@@ -60,7 +60,7 @@ $('app').innerHTML = `
     <section><div class="card-header"><h2>Request trace</h2><button id="latest-trace">Latest</button></div><div class="button-row"><label for="trace-id">Request</label><input id="trace-id" type="number" min="1" step="1" value="1"><button id="inspect-trace">Inspect</button><span id="trace-result" class="muted">Waiting for traffic</span></div><ol id="trace-list" class="trace-list"></ol></section>
   </div><details class="text-summary" open><summary>System summary & counters</summary><p id="summary"></p><div class="scroll-table"><table><caption class="sr-only">Replica state and request distribution</caption><thead><tr><th>Replica</th><th>State</th><th>CPU queue</th><th>Sleeping</th><th>Redis wait</th><th>Attempts</th><th>Local count</th></tr></thead><tbody id="replica-table"></tbody></table></div></details></section>
 </div>
-<dialog id="intro-dialog" aria-labelledby="intro-title"><div class="panel-heading"><h2 id="intro-title">OPERATING THE MODEL</h2></div><ol><li><strong>Set traffic.</strong> Requests enter through NGINX, reach a Go process, and use the shared Redis service.</li><li><strong>Select a component.</strong> Change capacity, stop a process, or interrupt Redis. Watch the queues and client outcomes.</li><li><strong>Inspect the evidence.</strong> The console shows individual request traces, counters, and throughput history.</li></ol><p>These are teaching values, not measurements of the real stack. The model never connects to Docker or production services.</p><button id="close-intro">Return to simulation</button></dialog>
+<dialog id="intro-dialog" aria-labelledby="intro-title"><div class="panel-heading"><h2 id="intro-title">OPERATING THE MODEL</h2></div><ol><li><strong>Set traffic.</strong> Requests enter through NGINX, reach a Go process, and use the shared Redis service.</li><li><strong>Select a component.</strong> Change capacity, stop a process, or interrupt Redis. Watch the queues and client outcomes.</li><li><strong>Inspect the evidence.</strong> The console shows individual request traces, counters, and throughput history.</li></ol><p>These are teaching values, not measurements of the real stack. The model never connects to Docker or production services. It is not an emulator or production monitor.</p><p class="guide-links"><a href="${import.meta.env.BASE_URL}model.txt" target="_blank" rel="noreferrer">Model assumptions</a> · <a href="${import.meta.env.BASE_URL}notices.txt" target="_blank" rel="noreferrer">Asset and dependency notices</a></p><button id="close-intro">Return to simulation</button></dialog>
 `;
 
 let experiment: Experiment | undefined;
@@ -225,7 +225,11 @@ function syncControls(): void {
 
 function update(): void {
   comparison.observe(snapshot);
-  if (pendingFeedback && snapshot.tick >= pendingFeedbackTick) { pendingFeedback = false; feedback('Change applied. Watch the queues, outcomes, and counters.'); }
+  if (pendingFeedback && snapshot.tick >= pendingFeedbackTick) {
+    pendingFeedback = false;
+    const rejected = snapshot.commands.find(c => c.tick === pendingFeedbackTick && c.applied === false);
+    feedback(rejected ? `Change rejected: ${rejected.error}` : 'Change applied. Watch the queues, outcomes, and counters.');
+  }
   if (selected.startsWith('app') && !snapshot.backends.some(b => `app${b.id}` === selected)) { selected = 'nginx'; renderInspector(); }
   const topology = snapshot.backends.map(b => b.id).join(',');
   if (topology !== lastTopology) {
@@ -273,6 +277,7 @@ function runWithSettings(): void {
     commands.push({ type: 'capacity', backend: i + 1, value: b.capacity }, { type: 'admission', backend: i + 1, value: b.inFlightLimit });
     if (b.state === 'stopped' || b.state === 'draining') commands.push({ type: 'stop', backend: i + 1 });
   });
+  experiment = undefined; $<HTMLSelectElement>('scenario').value = '';
   reset(config, commands, true);
 }
 
@@ -298,7 +303,10 @@ $('app').addEventListener('click', event => {
     case 'close-diagnostics': $('diagnostics').hidden = true; $('show-diagnostics').setAttribute('aria-expanded', 'false'); $('show-diagnostics').focus(); break;
     case 'new-seed': {
       const seed = Number($<HTMLInputElement>('seed').value);
-      try { reset({ ...initial, seed }, initialCommands); } catch (error) { feedback(String(error)); }
+      try {
+        reset({ ...initial, seed }, initialCommands);
+        experiment = undefined; $<HTMLSelectElement>('scenario').value = ''; update();
+      } catch (error) { feedback(String(error)); }
       break;
     }
     case 'add-backend': issue({ type: 'add' }); break;
@@ -350,17 +358,29 @@ media.addEventListener('change', () => { $<HTMLInputElement>('reduced-motion').c
 
 renderInspector();
 try {
-  await campus.mount($('campus'), select, id => { selectedRequest = id; $<HTMLInputElement>('trace-id').value = String(id); updateTrace(); });
+  await campus.mount($('campus'), select, id => {
+    selectedRequest = id; $<HTMLInputElement>('trace-id').value = String(id); updateTrace();
+    $('diagnostics').hidden = false; $('show-diagnostics').setAttribute('aria-expanded', 'true');
+  });
 } catch (error) {
   $('campus').innerHTML = '<p style="padding:30px">The visual campus could not start. All controls, metrics, and the system summary below remain available.</p>';
   console.error(error);
 }
 update();
 let previous: number | undefined;
+let frameWindow = 0, frames = 0;
+let catchingUp = false;
 function frame(now: number): void {
   const elapsed = previous === undefined ? 0 : now - previous; previous = now;
+  frameWindow += elapsed; frames++;
+  if (frameWindow >= 1000) {
+    $('render-rate').textContent = `${Math.round(frames * 1000 / frameWindow)} fps`;
+    frameWindow = 0; frames = 0;
+  }
   const result = clock.consume(elapsed, 20);
   if (result.behind && !clock.paused) feedback('Playback is catching up. All modeled requests are retained.');
+  else if (catchingUp && $('feedback').textContent?.startsWith('Playback is catching up.')) feedback('Playback has caught up.');
+  catchingUp = result.behind && !clock.paused;
   campus.render(engine.now + (clock.paused ? 0 : clock.interpolationUs));
   requestAnimationFrame(frame);
 }

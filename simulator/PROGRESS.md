@@ -17,6 +17,8 @@ Added Vite/TypeScript, exact dependency lockfile, integer event scheduler, seede
 
 Live tracker checked 5 November 2026: all six issues open. Repository is private; Pages is not enabled. No visibility change has been made.
 
+Latest status: implementation and local acceptance for #15–#19 are complete. The PR/CI review and #20's publication/live verification remain. Automatic approval review rejected the exact Pages enablement action because public hosting needs specific user approval. No Pages setting was changed.
+
 ## Pass 2 — cluster resources and failure boundaries
 
 Implemented root/slow request paths, round-robin routing, CPU queues, independent sleeps, Redis FIFO execution/transport, bounded admissions, passive failure knowledge, three total proxy attempts, coordinated drain/removal, process restart, and frozen snapshots. Redis accepted work remains alive when its caller disappears. Commands are recorded at tick boundaries.
@@ -46,3 +48,19 @@ Implemented one session baseline, a fixed 5–20 s measurement window after warm
 Browser evidence: scaling recovered to roughly 120 successful requests/s and zero queue after adding two backends; its scenario displayed Verified. Saved a baseline with 1,922 completed samples and two scale-out interventions. An unchanged 4× candidate reproduced every displayed measurement with zero deltas and paused at exactly 20.00 s. A candidate changing 120→121 offered requests/s was explicitly rejected as incomparable and showed the added 0.02 s traffic intervention. Fixed feedback that incorrectly reported catch-up after comparison auto-pause.
 
 Automated validation: **56 tests and production build passed**, including the regression for a gap in a zero-traffic recording. Still outstanding: all-scenario browser matrix, complete accessibility/responsive and maximum-load performance audit, source/asset/model documentation audit, isolated CI/Pages deployment and live checks, PR/review/merge, issue closure.
+
+## Pass 5 — scene, independent review, and acceptance
+
+Rechecked PGSimCity's `src/styles/labels.css` for readable world labels. Component names and states now sit on compact opaque labels, with stronger building/path contrast. State text remains visible at eight backends; flow markers render beneath buildings and labels. Narrow layouts place the two traffic controls above the scene. Checked 1280×720 desktop, the app's 701×853 viewport, and a 390×844 narrow viewport. No page-width overflow; narrow metrics and inspector content scroll within their own regions.
+
+Browser interaction evidence: native inspection and keyboard Enter operated pause, stop, restart, and one 20 ms step. Closing the inspector returned focus to its opener. Reduced motion preserved metrics/controls; console exposed the topology, process states, counters, and the full request timeline. All four scenarios displayed Verified after the relevant intervention: outage 59.6 successful/s with zero failures; drain 30.6/s with zero failures; Redis recovery 250.2/s and one queued command; scaling recovery 120.2/s and one queued request. The latter two late interventions retained and disclosed earlier overload failures rather than erasing them.
+
+The independent source/model audit reproduced and fixed four regressions: removal while retries connect could strand requests; detached Redis events could inherit a newer attempt ID; comparison diffs hid same-tick action ordering; and scenario completion could use pre-intervention throughput. All regressions failed before their fixes. The quick suite now has **61 passing tests**, with one opt-in performance test skipped by default. Production type-check/build passes. No backend files changed.
+
+Maximum-load evidence: the production browser preview at eight backends and 500 offered/s remained operable at 1× and 4× playback, with observed steady readings around 54–71 fps on the M5 Pro. Startup shader preparation can briefly lower that reading; the clock preserves work while catching up and reports recovery. No browser error/warning logs appeared in the production check. The separate 900 s model test offered 450,009 requests in 8.92 wall seconds; snapshot+metrics p95 was 1.89 ms. State stayed bounded and all work drained after traffic stopped (details in MODEL.md).
+
+## Pass 6 — static delivery preparation
+
+Added a separate Simulator workflow with tests/build for PRs and official, revision-pinned Pages artifact/deployment actions for main. Only `simulator/dist` is uploaded. Model text and dependency licenses are bundled so visitors do not need private-source access. All 20 production files were served through the repository base path and matched local SHA-256 hashes; no source maps are included. The hosting requirement is documented before enablement.
+
+Pending: PR CI and final review; specific approval to enable public Pages while retaining the private repository; hosting eligibility response; successful deployment, direct live smoke, README live-link activation, issue and milestone closure. The milestone is not complete yet.

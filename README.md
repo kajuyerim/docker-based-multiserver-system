@@ -8,6 +8,31 @@
 
 ---
 
+## Interactive simulator
+
+Operate a browser-only model of the same architecture: change traffic, scale the
+backends, stop or drain a process, and expose the shared Redis bottleneck. The
+full-screen scene includes component inspection, request traces, four guided
+experiments, and a comparison against one saved workload baseline.
+
+![Interactive multiserver simulation](docs/images/simulator.jpg)
+
+The capacities are **educational values**, not measurements of this deployment.
+See the [model contract](simulator/MODEL.md) and [local simulator instructions](simulator/README.md).
+The production bundle is ready for GitHub Pages; public hosting approval and live
+verification are still pending. Source-repository visibility remains private.
+
+```sh
+cd simulator
+npm ci
+npm run dev
+```
+
+Open `http://127.0.0.1:5173/docker-based-multiserver-system/`. Visitors to the
+published build will need only a browser; no Docker or credentials are required.
+
+---
+
 ## Quick start
 
 ```bash

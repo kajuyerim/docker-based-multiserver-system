@@ -3,8 +3,8 @@ import type { BackendSnapshot, SemanticEvent, Snapshot } from '../model/types';
 
 export type ComponentId = 'clients' | 'nginx' | 'redis' | `app${number}`;
 type Point = { x: number; y: number };
-const colors = { ink: 0x2c404e, muted: 0x4d6573, green: 0x73acb3, blue: 0x8e8fc6,
-  amber: 0xc8ad72, red: 0xba7972, idle: 0x99aab2 };
+const colors = { ink: 0x253744, muted: 0x485b65, green: 0x287f83, blue: 0x7763a3,
+  amber: 0xb88029, red: 0xa64a42, idle: 0x738b96 };
 
 export function backendState(b: BackendSnapshot): string {
   if (b.state !== 'running') return b.state === 'stopped' ? 'Stopped' : b.state === 'starting' ? 'Starting' : 'Draining';
@@ -12,7 +12,7 @@ export function backendState(b: BackendSnapshot): string {
   return b.inFlight ? 'Busy' : 'Idle';
 }
 
-interface Building { container: Container; shape: Graphics; label: Text; status: Text; point: Point; color: number }
+interface Building { container: Container; shape: Graphics; caption: Container; plate: Graphics; label: Text; status: Text; point: Point; color: number }
 
 export class Campus {
   private app = new Application();
@@ -32,34 +32,37 @@ export class Campus {
       autoStart: false, preference: 'webgl', width: host.clientWidth, height: host.clientHeight });
     host.append(this.app.canvas);
     this.app.canvas.setAttribute('aria-hidden', 'true');
+    this.world.sortableChildren = true;
     this.app.stage.addChild(this.world);
     const ground = new Graphics();
-    ground.poly([-350, 270, 620, -210, 1570, 270, 590, 770]).fill(0xa4b4bb);
+    ground.poly([-350, 270, 620, -210, 1570, 270, 590, 770]).fill(0xaebdc2);
     for (let x = -800; x < 1900; x += 55) {
       ground.moveTo(x, -300).lineTo(x + 1500, 800).stroke({ width: 1, color: 0xc4cfd2, alpha: 0.25 });
       ground.moveTo(x, 800).lineTo(x + 1500, -300).stroke({ width: 1, color: 0xc4cfd2, alpha: 0.25 });
     }
-    ground.poly([-10, 338, 627, 13, 1172, 291, 1172, 312, 545, 636, -10, 356]).fill(0x677f8b);
-    ground.poly([-10, 338, 627, 13, 1172, 291, 545, 615]).fill(0x8198a2).stroke({ width: 2, color: 0xb9c8cd });
+    ground.poly([-10, 338, 627, 13, 1172, 291, 1172, 312, 545, 636, -10, 356]).fill(0x526e7a);
+    ground.poly([-10, 338, 627, 13, 1172, 291, 545, 615]).fill(0x8ea2a8).stroke({ width: 2, color: 0xe1e7e3 });
     ground.poly([20, 337, 627, 28, 1140, 291, 545, 599]).stroke({ width: 1, color: 0xb7c8cb, alpha: 0.6 });
     this.world.addChild(ground, this.roads, this.selection);
     const add = (id: ComponentId, label: string, point: Point) => {
       const container = new Container();
+      container.zIndex = 2;
       container.position.set(point.x, point.y);
       const shape = new Graphics();
-      const title = new Text({ text: label, style: { fontFamily: 'system-ui', fontSize: 16, fontWeight: '500', fill: colors.ink } });
-      title.anchor.set(0.5); title.y = -105;
-      const status = new Text({ text: '', style: { fontFamily: 'system-ui', fontSize: 12, lineHeight: 16, fill: colors.muted, align: 'center' } });
-      status.anchor.set(0.5, 0); status.y = 42;
-      const titlePlate = new Graphics().rect(-48, -118, 96, 25).fill({ color: 0xf4f5ef, alpha: 0.93 });
-      if (id === 'clients') {
-        title.y = 76; titlePlate.position.y = 181; status.y = 97;
-      }
-      container.addChild(shape, titlePlate, title, status);
+      const caption = new Container();
+      const plate = new Graphics();
+      const title = new Text({ text: label, style: { fontFamily: 'system-ui', fontSize: 11, fontWeight: '600', fill: colors.ink } });
+      title.anchor.set(0.5); title.y = -8;
+      const status = new Text({ text: '', style: { fontFamily: 'system-ui', fontSize: 9, fill: colors.muted, align: 'center' } });
+      status.anchor.set(0.5); status.y = 7;
+      caption.addChild(plate, title, status);
+      caption.y = id === 'clients' ? 91 : -108;
+      caption.scale.set(1 / this.world.scale.x);
+      container.addChild(shape, caption);
       container.eventMode = 'static'; container.cursor = 'pointer';
       container.on('pointertap', () => onSelect(id));
       this.world.addChild(container);
-      this.buildings.set(id, { container, shape, label: title, status, point, color: -1 });
+      this.buildings.set(id, { container, shape, caption, plate, label: title, status, point, color: -1 });
     };
     this.add = add;
     add('clients', 'Clients', { x: 120, y: 330 });
@@ -67,6 +70,7 @@ export class Campus {
     add('redis', 'Redis', { x: 1030, y: 300 });
     for (let i = 0; i < 200; i++) {
       const marker = new Graphics().circle(0, 0, 4).fill(0xffffff).stroke({ width: 2, color: colors.green });
+      marker.zIndex = 1;
       marker.visible = false; marker.eventMode = 'static'; marker.cursor = 'pointer';
       marker.on('pointertap', () => { if (marker.label) onRequest(Number(marker.label)); });
       this.markers.push(marker); this.world.addChild(marker);
@@ -75,15 +79,11 @@ export class Campus {
       const width = host.clientWidth, height = host.clientHeight;
       this.app.renderer.resize(width, height);
       const left = width > 760 ? 230 : 25;
-      const top = width > 760 ? 125 : 160;
+      const top = width > 760 ? 150 : 280;
       const usableHeight = Math.max(280, height - top - 100);
       const scale = Math.min((width - left - 20) / 1180, usableHeight / 620);
       this.world.scale.set(scale);
-      for (const building of this.buildings.values()) {
-        building.label.style.fontSize = Math.max(16, 10 / scale);
-        building.status.style.fontSize = Math.max(12, 9 / scale);
-        building.status.style.lineHeight = Math.max(16, 11 / scale);
-      }
+      for (const building of this.buildings.values()) building.caption.scale.set(1 / scale);
       this.world.position.set(left + (width - left - 20 - 1180 * scale) / 2, top + (usableHeight - 620 * scale) / 2);
       this.render();
     });
@@ -109,22 +109,22 @@ export class Campus {
       });
       this.roads.clear();
       const path = (from: Point, to: Point) => {
-        this.roads.moveTo(from.x, from.y + 12).lineTo(to.x, to.y + 12).stroke({ width: 15, color: 0x567381 });
-        this.roads.moveTo(from.x, from.y + 12).lineTo(to.x, to.y + 12).stroke({ width: 1, color: 0xaac5ce });
+        this.roads.moveTo(from.x, from.y + 12).lineTo(to.x, to.y + 12).stroke({ width: 17, color: 0xbac8c8 });
+        this.roads.moveTo(from.x, from.y + 12).lineTo(to.x, to.y + 12).stroke({ width: 12, color: 0x3e5965 });
+        this.roads.moveTo(from.x, from.y + 12).lineTo(to.x, to.y + 12).stroke({ width: 1, color: 0x7fa0ad });
       };
       path(this.point('clients'), this.point('nginx'));
       for (const b of snapshot.backends) { path(this.point('nginx'), this.point(`app${b.id}`)); path(this.point(`app${b.id}`), this.point('redis')); }
       for (const marker of this.markers) this.world.addChild(marker);
     }
     this.paint('clients', colors.blue, `${snapshot.config.rate} offered /s`);
-    this.paint('nginx', colors.green, `${snapshot.config.retry ? 'Retry on' : 'Retry off'} · round robin`);
+    this.paint('nginx', colors.green, snapshot.config.retry ? 'Retries enabled' : 'Retries disabled');
     this.paint('redis', !snapshot.redis.online ? colors.red : snapshot.redis.queue > 5 ? colors.amber : colors.green,
-      `${snapshot.redis.online ? snapshot.redis.active ? 'Busy' : 'Idle' : 'Offline'} · ${snapshot.redis.queue} queued\n${snapshot.totals.globalCount.toLocaleString()} global`);
+      `${snapshot.redis.online ? 'Online' : 'Offline'} · ${snapshot.redis.queue} queued`);
     for (const b of snapshot.backends) {
-      this.buildings.get(`app${b.id}`)!.status.visible = snapshot.backends.length <= 4;
       const state = backendState(b);
       const color = state === 'Stopped' ? colors.red : state === 'Saturated' ? colors.amber : state === 'Draining' || state === 'Starting' ? colors.blue : state === 'Idle' ? colors.idle : colors.green;
-      this.paint(`app${b.id}`, color, `${state} · ${b.inFlight} in flight\n${b.localCount.toLocaleString()} local`);
+      this.paint(`app${b.id}`, color, this.world.scale.x < 0.4 ? state : `${state} · ${b.inFlight} in flight`);
     }
     const point = this.point(selected);
     this.selection.clear().ellipse(point.x, point.y + 12, 78, 43).stroke({ color: 0xe5f3ec, width: 2, alpha: 0.9 });
@@ -169,15 +169,19 @@ export class Campus {
   private paint(id: ComponentId, color: number, status: string): void {
     const b = this.buildings.get(id)!;
     b.status.text = status;
+    const width = Math.max(b.label.width, b.status.width) + 16;
+    b.plate.clear().rect(-width / 2, -19, width, 38).fill({ color: 0xf5f5ef, alpha: 0.97 })
+      .stroke({ width: 1, color: 0x6f858e, alpha: .35 });
+    b.plate.rect(-width / 2, -19, 3, 38).fill(color);
     if (b.color === color) return;
     b.color = color;
     const g = b.shape.clear();
-    const box = (x: number, y: number, w: number, d: number, h: number, roof = 0xd3dfe0, side = 0x607c89) => {
+    const box = (x: number, y: number, w: number, d: number, h: number, roof = 0xe0e6df, side = 0x435e6d) => {
       g.poly([x-w,y-h,x,y+d-h,x,y+d,x-w,y]).fill(side);
-      g.poly([x,y+d-h,x+w,y-h,x+w,y,x,y+d]).fill(0x8ca2ab);
+      g.poly([x,y+d-h,x+w,y-h,x+w,y,x,y+d]).fill(0x829ba3);
       g.poly([x-w,y-h,x,y-d-h,x+w,y-h,x,y+d-h]).fill(roof).stroke({ width: 1, color: 0xe0e7e5, alpha: .65 });
     };
-    g.poly([-75,15,8,-28,102,22,18,68]).fill({ color: 0x284b5c, alpha: .18 });
+    g.poly([-75,15,8,-28,121,43,37,89]).fill({ color: 0x284251, alpha: .25 });
     box(0, 13, 85, 43, 7, 0x9fb2b8, 0x6a818e);
     g.poly([-78,5,0,-35,78,5,0,45]).stroke({ width: 2, color, alpha: .9 });
     if (id.startsWith('app')) {

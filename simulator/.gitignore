@@ -3,3 +3,5 @@ dist/
 .vitest/
 playwright-report/
 test-results/
+public/model.txt
+public/notices.txt
