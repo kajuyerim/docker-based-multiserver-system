@@ -64,3 +64,11 @@ Maximum-load evidence: the production browser preview at eight backends and 500 
 Added a separate Simulator workflow with tests/build for PRs and official, revision-pinned Pages artifact/deployment actions for main. Only `simulator/dist` is uploaded. Model text and dependency licenses are bundled so visitors do not need private-source access. All 20 production files were served through the repository base path and matched local SHA-256 hashes; no source maps are included. The hosting requirement is documented before enablement.
 
 Pending: PR CI and final review; specific approval to enable public Pages while retaining the private repository; hosting eligibility response; successful deployment, direct live smoke, README live-link activation, issue and milestone closure. The milestone is not complete yet.
+
+## Pass 7 — final interaction review
+
+Independent UI review found three issues: a pinned older trace could be selected by Latest, reset left the request-number input stale, and periodic comparison rendering collapsed its disclosure and lost keyboard focus. Fixed all three. Browser checks reproduced the old Latest behavior, then selected request 1,702 after history rotation and reset the input to 1. With a completed candidate, the expanded comparison details and focused summary survived resumed playback from 22 to 81 simulated seconds. Utilization changes now use percentage points. Compact world labels fit narrow scenes.
+
+A useful matched comparison was also verified in the production browser: with 120 offered requests/s, adding two backends increased successful throughput from 50.5 to 119.9/s and reduced failures from 1,041 to zero during the same 5–20 s window (1,799 completed samples in each run). Average latency fell from 1,076.5 to 46.1 ms; p95 fell from 2,560.4 to 48.7 ms. These are teaching-model measurements, not deployment benchmarks.
+
+The final targeted source review found no further issues. Local validation remains 61 passing tests, one intentionally skipped opt-in performance test, and a successful type-check/production build. Draft PR #43 contains the implementation; publication remains pending the approval and eligibility gates above.

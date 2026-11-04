@@ -260,6 +260,7 @@ function reset(config = initial, commands = initialCommands, running = false): v
   history = new MetricsHistory(); clock.reset(); comparison.reset();
   if (running) clock.resume();
   snapshot = engine.snapshot(); metrics = history.observe(snapshot); trace = undefined; selectedRequest = 1;
+  $<HTMLInputElement>('trace-id').value = '1';
   for (const [id, value] of Object.entries({ rate: config.rate, slow: config.slowPercent, 'slow-seconds': config.slowSeconds, jitter: config.jitter * 100, seed: config.seed })) {
     $<HTMLInputElement>(id).value = String(value);
     const output = document.getElementById(`${id}-value`);
@@ -310,7 +311,7 @@ $('app').addEventListener('click', event => {
       break;
     }
     case 'add-backend': issue({ type: 'add' }); break;
-    case 'latest-trace': selectedRequest = snapshot.traces.at(-1)?.id ?? 1; $<HTMLInputElement>('trace-id').value = String(selectedRequest); updateTrace(); break;
+    case 'latest-trace': selectedRequest = snapshot.traces.reduce((latest, trace) => Math.max(latest, trace.id), 1); $<HTMLInputElement>('trace-id').value = String(selectedRequest); updateTrace(); break;
     case 'inspect-trace': selectedRequest = Number($<HTMLInputElement>('trace-id').value); updateTrace(); break;
     case 'intro': introWasRunning = !clock.paused; clock.pause(); update(); $<HTMLDialogElement>('intro-dialog').showModal(); break;
   }

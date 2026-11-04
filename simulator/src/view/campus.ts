@@ -168,11 +168,14 @@ export class Campus {
   }
   private paint(id: ComponentId, color: number, status: string): void {
     const b = this.buildings.get(id)!;
+    const compact = this.world.scale.x < 0.4;
+    b.label.style.fontSize = compact ? 9 : 11;
+    b.status.style.fontSize = compact ? 8 : 9;
     b.status.text = status;
-    const width = Math.max(b.label.width, b.status.width) + 16;
-    b.plate.clear().rect(-width / 2, -19, width, 38).fill({ color: 0xf5f5ef, alpha: 0.97 })
+    const width = Math.max(b.label.width, b.status.width) + (compact ? 12 : 16), height = compact ? 32 : 38;
+    b.plate.clear().rect(-width / 2, -height / 2, width, height).fill({ color: 0xf5f5ef, alpha: 0.97 })
       .stroke({ width: 1, color: 0x6f858e, alpha: .35 });
-    b.plate.rect(-width / 2, -19, 3, 38).fill(color);
+    b.plate.rect(-width / 2, -height / 2, 3, height).fill(color);
     if (b.color === color) return;
     b.color = color;
     const g = b.shape.clear();

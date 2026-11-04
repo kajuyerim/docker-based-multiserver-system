@@ -12,7 +12,7 @@ const labels: [keyof RunValues, string, number, string][] = [
   ['globalIncrements', 'Global increments', 0, ''],
 ];
 const escape = (s: string) => s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
-const format = (value: number | null, digits: number, unit: string) => value === null ? 'No samples' : `${(unit === '%' ? value * 100 : value).toFixed(digits)}${unit ? ` ${unit}` : ''}`;
+const format = (value: number | null, digits: number, unit: string, delta = false) => value === null ? 'No samples' : `${(unit === '%' ? value * 100 : value).toFixed(digits)}${unit ? ` ${delta && unit === '%' ? 'pp' : unit}` : ''}`;
 
 export class ComparisonPanel {
   private recorder = new RunRecorder();
@@ -22,6 +22,7 @@ export class ComparisonPanel {
   private runningCandidate = false;
   private snapshot?: Snapshot;
   private status = 'One baseline per session. Observe seconds 5–20; seconds 0–5 are warmup.';
+  private resultHtml = '';
 
   constructor(private root: HTMLElement, private hooks: {
     prepare: (baseline: RecordedRun) => void;
@@ -97,11 +98,16 @@ export class ComparisonPanel {
     (get('[data-compare=prepare]') as HTMLButtonElement).disabled = !this.baseline;
     (get('[data-compare=clear]') as HTMLButtonElement).disabled = !this.baseline;
     get('#comparison-context').textContent = this.baseline ? `Saved model ${this.baseline.version} · seed ${this.baseline.seed} · ${(OBSERVATION.end - OBSERVATION.start) / 1_000_000} s measurement · ${this.baseline.values.completed} completed samples · ${this.baseline.commands.length} interventions` : 'No saved baseline.';
-    const result = get('#comparison-result');
-    if (!this.baseline || !this.candidate) { result.innerHTML = ''; return; }
+    if (!this.baseline || !this.candidate) { this.setResult(''); return; }
     const comparison = compareRuns(this.baseline, this.candidate);
     const changes = comparison.changes.length ? `<ul>${comparison.changes.slice(0, 20).map(c => `<li>${escape(c)}</li>`).join('')}</ul>${comparison.changes.length > 20 ? `<p>${comparison.changes.length - 20} more recorded differences.</p>` : ''}` : '<p>Identical settings and interventions.</p>';
-    if (!comparison.comparable) { result.innerHTML = `<p class="comparison-error">Not comparable: ${escape(comparison.reason)}</p>${changes}`; return; }
-    result.innerHTML = `<div class="scroll-table"><table><thead><tr><th>Measurement</th><th>Baseline</th><th>Candidate</th><th>Change</th></tr></thead><tbody>${labels.map(([key, label, digits, unit]) => `<tr><th scope="row">${label}</th><td>${format(this.baseline!.values[key], digits, unit)}</td><td>${format(this.candidate!.values[key], digits, unit)}</td><td>${format(comparison.delta![key], digits, unit === '%' ? '%' : unit)}</td></tr>`).join('')}</tbody></table></div><details><summary>Changed settings and interventions (${comparison.changes.length})</summary>${changes}</details>`;
+    if (!comparison.comparable) { this.setResult(`<p class="comparison-error">Not comparable: ${escape(comparison.reason)}</p>${changes}`); return; }
+    this.setResult(`<div class="scroll-table"><table><thead><tr><th>Measurement</th><th>Baseline</th><th>Candidate</th><th>Change</th></tr></thead><tbody>${labels.map(([key, label, digits, unit]) => `<tr><th scope="row">${label}</th><td>${format(this.baseline!.values[key], digits, unit)}</td><td>${format(this.candidate!.values[key], digits, unit)}</td><td>${format(comparison.delta![key], digits, unit, true)}</td></tr>`).join('')}</tbody></table></div><details><summary>Changed settings and interventions (${comparison.changes.length})</summary>${changes}</details>`);
+  }
+
+  private setResult(html: string): void {
+    if (html === this.resultHtml) return;
+    this.resultHtml = html;
+    this.root.querySelector('#comparison-result')!.innerHTML = html;
   }
 }
