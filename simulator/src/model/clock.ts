@@ -9,6 +9,7 @@ export class Clock {
   constructor(private readonly advance: () => void) {}
 
   get tick(): number { return this.ticks; }
+  get interpolationUs(): number { return Math.max(0, Math.min(TICK_US, this.accumulatedUs)); }
   pause(): void { this.paused = true; }
   resume(): void { this.paused = false; }
   setSpeed(speed: number): void {
@@ -23,7 +24,7 @@ export class Clock {
     if (this.paused) return { steps: 0, behind: false };
     this.accumulatedUs += elapsedMs * 1000 * this.speed;
     let steps = 0;
-    while (this.accumulatedUs + 0.000001 >= TICK_US && steps < maxSteps) {
+    while (!this.paused && this.accumulatedUs + 0.000001 >= TICK_US && steps < maxSteps) {
       this.step();
       this.accumulatedUs -= TICK_US;
       steps++;

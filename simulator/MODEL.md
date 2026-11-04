@@ -43,3 +43,26 @@ Redis interruption rejects new work, cancels uncommitted queued/executing work, 
 `snapshot()` returns a deeply frozen, detached object containing configuration, process states, pending requests, cumulative counters, Redis work, the most recent five seconds of client completions, bounded traces/events, and recorded commands. No renderer or panel may mutate it. Only the core schedules events. Core files have no browser or PixiJS imports.
 
 Request conservation is `offered = succeeded + failed + pending`. Backend attempts and detached Redis work are separate from that equation. Global state counts committed INCR operations, not successful responses. The model deliberately permits local/global/success counts to differ under failures.
+
+## Metrics and guided experiments
+
+Live metrics use up to five seconds of simulated time; the actual window is displayed. Successful throughput counts successful logical requests. Error fraction is failed terminal requests divided by all terminal requests in the window. Retries do not create extra client completions. Mean and nearest-rank p95 latency use the same completed cohort, including failures; no completed samples means no latency or error fraction. Pending count and oldest pending age show work excluded from that cohort.
+
+CPU utilization is busy processor time divided by configured processor-slot time, including stopped slots. Redis utilization counts execution time, excluding transport. Queue depth is runnable CPU work plus queued Redis commands; sleeping and dependency-waiting requests remain separately visible. Queue averages integrate depth over simulated time. The chart retains 301 samples at 200 ms intervals (one minute); manual stepping can shorten that visible span. Snapshot histories retain only cumulative metric boundaries. One explicitly selected trace is retained in addition to the 100 recent traces.
+
+Each guided experiment has an initial configuration, a suggested intervention, and evidence predicates:
+
+- Scaling first observes a CPU queue above 20, then requires at least three running backends, more than 110 successful requests/s, and fewer than 10 queued requests.
+- Outage requires app2 stopped, at least one retry decision, retries enabled, no client failures, and more than 55 successful requests/s.
+- Drain must first observe admitted work on a draining app2, then its withdrawn/stopped state with no in-flight requests, no client failures, and ongoing service above 20 requests/s.
+- Redis first observes more than 60 queued commands and over 90% execution utilization. Recovery requires shorter command costs, more than 200 successful requests/s, and fewer than 20 queued Redis commands.
+
+All completion predicates require at least four seconds of metric observations and 50 terminal samples. Completion records that the mechanism was observed; later interventions can still break the system. Tests include a positive reproducible run and an uncompleted counterexample for every experiment.
+
+## One matched baseline
+
+The first five seconds warm the model; the observation interval is `(5 s, 20 s]`. Saving before completion waits for the full recording. Saving later explicitly captures that first observation window, not the most recent screen. One baseline lives in memory and survives experiment resets; replacement/clearing is explicit, and reloading clears it.
+
+Preparing a candidate recreates the baseline's clean initial configuration and schedules its common interventions at the same ticks. The candidate starts paused so the user can add an operating change. It pauses at 20 seconds. Settings and interventions are listed with before/after measurements. Seed, traffic recipe (including timed traffic changes), model version, and observation boundaries must match; offered-stream hashes provide an additional deterministic check. Rejected intervention targets make the run invalid. Mismatches produce an explanation instead of a numerical comparison.
+
+Comparison uses every terminal latency sample in the observation window, the exact integrated average queue and busy-time deltas, the maximum observed 200 ms queue sample, pending/oldest age at the end, and local/global counter increments during the window. Increment totals can differ because work entered or committed on opposite sides of the warmup boundary. Utilization differences are percentage points. Empty cohorts remain empty. The fixed maximum workload, finite pending admission limit, and 15-second observation bound the recorded latency sample array.

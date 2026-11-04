@@ -15,7 +15,7 @@ export type Command =
   | { type: 'retry'; enabled: boolean }
   | { type: 'redis'; online?: boolean; incrMs?: number; publishMs?: number; rttMs?: number };
 
-export interface RecordedCommand { tick: number; command: Command }
+export interface RecordedCommand { tick: number; command: Command; applied?: boolean; error?: string }
 export interface SemanticEvent {
   sequence: number;
   at: number;

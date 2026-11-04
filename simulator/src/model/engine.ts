@@ -88,17 +88,26 @@ export class Engine {
   }
 
   command(command: Command, tick = this.tick + 1): void {
+    this.queueCommand(command, tick, true);
+  }
+
+  replay(commands: readonly RecordedCommand[]): void {
+    for (const record of commands) this.queueCommand(record.command, record.tick, false);
+  }
+
+  private queueCommand(command: Command, tick: number, validateNow: boolean): void {
     if (!Number.isSafeInteger(tick) || tick <= this.tick) throw new Error('Command must target a future tick');
     if (this.commands.length >= LIMITS.commands) throw new Error('Action recording is full; reset the experiment to continue');
-    this.validateCommand(command);
+    if (validateNow) this.validateCommand(command);
     const copy = structuredClone(command);
-    this.commands.push({ tick, command: copy });
+    const record: RecordedCommand = { tick, command: copy };
+    this.commands.push(record);
     this.pendingCommands++;
     this.scheduler.schedule(tick * TICK_US, PRIORITY.command, () => {
       this.pendingCommands--;
       // Earlier commands can remove a target before a future replay action runs.
-      try { this.validateCommand(copy); this.apply(copy); }
-      catch (error) { this.emit('command-rejected', String(error)); }
+      try { this.validateCommand(copy); this.apply(copy); record.applied = true; }
+      catch (error) { record.applied = false; record.error = String(error); this.emit('command-rejected', String(error)); }
     });
   }
 
@@ -242,6 +251,7 @@ export class Engine {
     this.workloadHash = Math.imul(this.workloadHash ^ id, 16777619) >>> 0;
     this.workloadHash = Math.imul(this.workloadHash ^ this.now, 16777619) >>> 0;
     this.workloadHash = Math.imul(this.workloadHash ^ (route === 'root' ? 0 : 1), 16777619) >>> 0;
+    this.workloadHash = Math.imul(this.workloadHash ^ (route === 'slow' ? Math.round(this.config.slowSeconds * SECOND) : 0), 16777619) >>> 0;
     const request: Request = { id, route, createdAt: this.now, slowUs: Math.round(this.config.slowSeconds * SECOND),
       tried: [], attempt: 0, stage: 'routing', stageSince: this.now };
     this.traces.set(id, { id, route, startedAt: this.now, events: [] });

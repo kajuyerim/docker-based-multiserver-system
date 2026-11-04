@@ -8,6 +8,9 @@ import { MetricsHistory } from './metrics/metrics';
 import type { Metrics } from './metrics/metrics';
 import { Campus, backendState } from './view/campus';
 import type { ComponentId } from './view/campus';
+import { Experiment, SCENARIOS } from './scenarios/scenarios';
+import type { ScenarioId } from './scenarios/scenarios';
+import { ComparisonPanel } from './ui/comparison-panel';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string): T => document.getElementById(id) as T;
 const number = (value: number, digits = 0) => value.toLocaleString('en', { maximumFractionDigits: digits });
@@ -30,7 +33,7 @@ $('app').innerHTML = `
       <div class="vital"><span>CPU / REDIS</span><strong><b id="cpu">0</b><i>% / </i><b id="redis-util">0</b><i>%</i></strong><small><b id="queue">0</b> queued</small></div>
       <div class="vital"><span>GLOBAL COUNT</span><strong id="global">0</strong><small>committed INCR</small></div>
     </section>
-    <div class="utility-row"><span class="model-disclosure">EDUCATIONAL MODEL <span>· synthetic capacity · 5 s metrics</span></span><div><button id="intro">Guide</button><button id="show-diagnostics" aria-expanded="false" aria-controls="diagnostics">Console</button><button id="show-inspector" aria-expanded="false" aria-controls="inspector-panel">Inspector</button></div></div>
+    <div class="utility-row"><span class="model-disclosure">EDUCATIONAL MODEL <span>· synthetic capacity · 5 s metrics</span></span><div><button id="intro">Guide</button><button id="show-comparison" aria-expanded="false" aria-controls="comparison-panel">Compare</button><button id="show-diagnostics" aria-expanded="false" aria-controls="diagnostics">Console</button><button id="show-inspector" aria-expanded="false" aria-controls="inspector-panel">Inspector</button></div></div>
   </header>
   <aside class="traffic-panel overlay" aria-label="Traffic controls">
     <div class="panel-heading"><h2>WORKLOAD</h2><span>seed <b id="seed-label">476</b></span></div>
@@ -45,11 +48,13 @@ $('app').innerHTML = `
   <aside id="inspector-panel" class="inspector overlay" aria-label="Component inspector" hidden><div class="panel-heading"><h2>INSPECTOR</h2><button id="close-inspector" aria-label="Close inspector">×</button></div><nav id="component-nav" class="component-nav" aria-label="Inspect a component"></nav><div id="inspector-body"></div></aside>
   <div class="scene-caption"><span>NGINX / GO / REDIS</span><p>Click a component to inspect its state.</p></div>
   <div class="scene-legend" aria-label="Scene legend"><span><i style="background:#73acb3"></i>Active</span><span><i style="background:#c8ad72"></i>Queueing</span><span><i style="background:#8e8fc6"></i>Draining</span><span><i style="background:#ba7972"></i>Stopped</span><span>≤200 sampled flow markers</span></div>
+  <section id="experiment-panel" class="experiment-panel overlay" aria-label="Guided experiment" hidden><div><h2 id="experiment-title"></h2><p id="experiment-setup"></p><p id="experiment-goal"></p><p id="experiment-evidence"></p></div><div class="experiment-actions"><button id="experiment-action"></button><button id="experiment-reset">Reset experiment</button><button id="experiment-exit">Free running</button></div></section>
   <p id="feedback" class="feedback" role="status" aria-live="polite">Ready. Change the workload or select a component.</p>
   <footer class="transport-bar" aria-label="Playback">
     <div class="transport-controls"><button id="pause">Ⅱ Pause</button><button id="step">Step</button><label class="sr-only" for="speed">Playback speed</label><select id="speed"><option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select><button id="reset">↻ Reset</button><button id="fresh-settings">Run current settings</button></div>
-    <div class="transport-context"><span>FREE RUNNING</span><span id="metric-window">5 s rolling window</span></div><a href="https://github.com/kajuyerim/docker-based-multiserver-system/blob/main/simulator/MODEL.md" target="_blank" rel="noreferrer">Model ${MODEL_VERSION} ↗</a>
+    <div class="transport-context"><label for="scenario">EXPERIMENT</label><select id="scenario"><option value="">Free running</option>${SCENARIOS.map(s => `<option value="${s.id}">${s.title}</option>`).join('')}</select><span id="metric-window">5 s rolling window</span></div><a href="https://github.com/kajuyerim/docker-based-multiserver-system/blob/main/simulator/MODEL.md" target="_blank" rel="noreferrer">Model ${MODEL_VERSION} ↗</a>
   </footer>
+  <section id="comparison-panel" class="comparison-panel overlay" aria-label="Baseline comparison" hidden></section>
   <section id="diagnostics" class="diagnostics overlay" aria-label="Simulation console" hidden><div class="panel-heading"><h2>CONSOLE</h2><button id="close-diagnostics" aria-label="Close console">×</button></div><div class="console-grid">
     <section><div class="card-header"><h2>Throughput</h2><span class="small muted">60 simulated seconds</span></div><svg id="chart" class="chart" viewBox="0 0 600 135" role="img" aria-label="Recent offered and successful throughput; current values appear in the top instruments."></svg><div class="chart-caption">— Offered &nbsp; — Successful</div></section>
     <section><div class="card-header"><h2>Request trace</h2><button id="latest-trace">Latest</button></div><div class="button-row"><label for="trace-id">Request</label><input id="trace-id" type="number" min="1" step="1" value="1"><button id="inspect-trace">Inspect</button><span id="trace-result" class="muted">Waiting for traffic</span></div><ol id="trace-list" class="trace-list"></ol></section>
@@ -58,6 +63,8 @@ $('app').innerHTML = `
 <dialog id="intro-dialog" aria-labelledby="intro-title"><div class="panel-heading"><h2 id="intro-title">OPERATING THE MODEL</h2></div><ol><li><strong>Set traffic.</strong> Requests enter through NGINX, reach a Go process, and use the shared Redis service.</li><li><strong>Select a component.</strong> Change capacity, stop a process, or interrupt Redis. Watch the queues and client outcomes.</li><li><strong>Inspect the evidence.</strong> The console shows individual request traces, counters, and throughput history.</li></ol><p>These are teaching values, not measurements of the real stack. The model never connects to Docker or production services.</p><button id="close-intro">Return to simulation</button></dialog>
 `;
 
+let experiment: Experiment | undefined;
+let announcedCompletion = false;
 let engine = new Engine();
 let initial: Config = { ...DEFAULT_CONFIG };
 let initialCommands: Command[] = [];
@@ -68,6 +75,8 @@ let selected: ComponentId = 'nginx';
 let trace: DeepReadonly<Trace> | undefined;
 let selectedRequest = 1;
 let pendingFeedback = false;
+let pendingFeedbackTick = 0;
+const pendingControls = new Map<string, number>();
 let lastTopology = '';
 const campus = new Campus();
 const media = matchMedia('(prefers-reduced-motion: reduce)');
@@ -79,12 +88,23 @@ const clock = new Clock(() => {
   }
 });
 clock.resume();
+const comparison = new ComparisonPanel($('comparison-panel'), {
+  prepare: baseline => {
+    experiment = undefined;
+    $<HTMLSelectElement>('scenario').value = '';
+    reset(baseline.initialConfig, []);
+    engine.replay(baseline.commands);
+    snapshot = engine.snapshot(); update();
+  },
+  pause: () => clock.pause(),
+  feedback,
+});
 
 function feedback(message: string): void { $('feedback').textContent = message; }
 function issue(command: Command): void {
   try {
     engine.command(command);
-    pendingFeedback = true;
+    pendingFeedback = true; pendingFeedbackTick = engine.tick + 1;
     feedback(clock.paused ? 'Change queued. Step or resume to apply it at the next boundary.' : 'Change queued for the next simulation boundary.');
   } catch (error) { feedback(String(error).replace('Error: ', '')); }
 }
@@ -162,8 +182,50 @@ function updateTrace(): void {
   $('trace-list').innerHTML = trace.events.map(e => `<li><time>${((e.at - trace!.startedAt) / 1000).toFixed(1)} ms</time>${escape(e.message)}</li>`).join('');
 }
 
+function updateExperiment(): void {
+  $('experiment-panel').hidden = !experiment;
+  document.body.classList.toggle('in-experiment', !!experiment);
+  if (!experiment) return;
+  const progress = experiment.observe(snapshot, metrics);
+  $('experiment-title').textContent = `${experiment.definition.title}${progress.complete ? ' · Verified' : ''}`;
+  $('experiment-setup').textContent = experiment.definition.setup;
+  $('experiment-goal').textContent = progress.message;
+  $('experiment-evidence').textContent = progress.evidence;
+  $('experiment-action').textContent = experiment.definition.action;
+  $<HTMLButtonElement>('experiment-action').disabled = !progress.canAct;
+  if (progress.complete && !announcedCompletion) { announcedCompletion = true; feedback(`Experiment complete. ${progress.evidence}`); }
+}
+
+function startExperiment(id: ScenarioId): void {
+  experiment = new Experiment(id); announcedCompletion = false;
+  reset({ ...DEFAULT_CONFIG, ...experiment.definition.config }, [], true);
+  $<HTMLSelectElement>('scenario').value = id;
+}
+
+function syncControls(): void {
+  const b = snapshot.backends.find(b => `app${b.id}` === selected);
+  const values: Record<string, [number, string]> = {
+    rate: [snapshot.config.rate, ''], slow: [snapshot.config.slowPercent, '%'],
+    'slow-seconds': [snapshot.config.slowSeconds, ' s'], jitter: [snapshot.config.jitter * 100, '%'],
+    'redis-incr': [snapshot.config.redisIncrMs, ' ms'], 'redis-publish': [snapshot.config.redisPublishMs, ' ms'],
+    'redis-rtt': [snapshot.config.redisRttMs, ' ms'],
+  };
+  if (b) { values.capacity = [b.capacity, ' /s']; values.admission = [b.inFlightLimit, '']; }
+  for (const [id, [value, unit]] of Object.entries(values)) {
+    const input = document.getElementById(id) as HTMLInputElement | null;
+    if (!input || (pendingControls.get(id) ?? 0) > snapshot.tick || document.activeElement === input) continue;
+    input.value = String(value); $(`${id}-value`).textContent = `${value}${unit}`;
+    pendingControls.delete(id);
+  }
+  for (const [id, value] of [['retry', snapshot.config.retry], ['redis-online', snapshot.config.redisOnline]] as const) {
+    const input = document.getElementById(id) as HTMLInputElement | null;
+    if (input && (pendingControls.get(id) ?? 0) <= snapshot.tick) input.checked = value;
+  }
+}
+
 function update(): void {
-  if (pendingFeedback && snapshot.pendingCommands === 0) { pendingFeedback = false; feedback('Change applied. Watch the queues, outcomes, and counters.'); }
+  comparison.observe(snapshot);
+  if (pendingFeedback && snapshot.tick >= pendingFeedbackTick) { pendingFeedback = false; feedback('Change applied. Watch the queues, outcomes, and counters.'); }
   if (selected.startsWith('app') && !snapshot.backends.some(b => `app${b.id}` === selected)) { selected = 'nginx'; renderInspector(); }
   const topology = snapshot.backends.map(b => b.id).join(',');
   if (topology !== lastTopology) {
@@ -173,7 +235,7 @@ function update(): void {
     $('component-nav').innerHTML = ids.map(id => `<button data-component="${id}" aria-pressed="${id === selected}">${id === 'clients' ? 'Visitors' : id === 'nginx' ? 'NGINX' : id === 'redis' ? 'Redis' : id}</button>`).join('');
   }
   $('component-nav').querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed', String(b.dataset.component === selected)));
-  updateInspector();
+  updateInspector(); syncControls();
   $('sim-time').textContent = `${(snapshot.now / 1_000_000).toFixed(2)} s`;
   $('seed-label').textContent = String(snapshot.config.seed);
   $('pause').textContent = clock.paused ? '▶ Resume' : 'Ⅱ Pause';
@@ -181,7 +243,7 @@ function update(): void {
   $<HTMLButtonElement>('step').disabled = !clock.paused;
   $('summary').textContent = `Visitors → NGINX → ${snapshot.backends.length} backends → Redis. ${snapshot.backends.filter(b => b.state === 'running').length} processes running; ${snapshot.backends.filter(b => b.state === 'stopped').length} stopped; ${snapshot.backends.filter(b => b.state === 'draining').length} draining. Redis ${snapshot.redis.online ? 'online' : 'offline'}. ${metrics.queue} queued, ${metrics.pending} in flight. Success ${number(metrics.successRate, 1)}/s; ${metrics.errorFraction === null ? 'no completed samples' : number(metrics.errorFraction * 100, 1) + '% failures'}. Global count ${snapshot.totals.globalCount}; lifetime local entries ${snapshot.totals.localEntries}.`;
   $('replica-table').innerHTML = snapshot.backends.map(b => `<tr><th scope="row">app${b.id}</th><td>${backendState(b)}</td><td>${b.cpuQueue}</td><td>${b.sleeping}</td><td>${b.redisWaiting}</td><td>${b.attempts}</td><td>${b.localCount}</td></tr>`).join('');
-  updateMetrics(metrics); updateTrace();
+  updateMetrics(metrics); updateTrace(); updateExperiment();
   campus.update(snapshot, selected, $<HTMLInputElement>('reduced-motion').checked);
   campus.render();
 }
@@ -190,8 +252,8 @@ function reset(config = initial, commands = initialCommands, running = false): v
   const next = new Engine(config);
   for (const command of commands) next.command(command);
   initial = { ...config }; initialCommands = structuredClone(commands);
-  engine = next; pendingFeedback = false;
-  history = new MetricsHistory(); clock.reset();
+  engine = next; pendingFeedback = false; pendingControls.clear();
+  history = new MetricsHistory(); clock.reset(); comparison.reset();
   if (running) clock.resume();
   snapshot = engine.snapshot(); metrics = history.observe(snapshot); trace = undefined; selectedRequest = 1;
   for (const [id, value] of Object.entries({ rate: config.rate, slow: config.slowPercent, 'slow-seconds': config.slowSeconds, jitter: config.jitter * 100, seed: config.seed })) {
@@ -224,8 +286,12 @@ $('app').addEventListener('click', event => {
   switch (target.id) {
     case 'pause': clock.paused ? clock.resume() : clock.pause(); snapshot = engine.snapshot(); metrics = history.observe(snapshot); update(); break;
     case 'step': clock.step(); snapshot = engine.snapshot(); metrics = history.observe(snapshot); update(); break;
-    case 'reset': reset(); break;
+    case 'reset': if (experiment) startExperiment(experiment.definition.id); else reset(); break;
+    case 'experiment-action': if (experiment) for (const command of experiment.actions(snapshot)) issue(command); break;
+    case 'experiment-reset': if (experiment) startExperiment(experiment.definition.id); break;
+    case 'experiment-exit': experiment = undefined; $<HTMLSelectElement>('scenario').value = ''; update(); break;
     case 'run-settings': case 'fresh-settings': runWithSettings(); break;
+    case 'show-comparison': comparison.toggle(); break;
     case 'show-inspector': $('inspector-panel').hidden = !$('inspector-panel').hidden; target.setAttribute('aria-expanded', String(!$('inspector-panel').hidden)); break;
     case 'close-inspector': $('inspector-panel').hidden = true; $('show-inspector').setAttribute('aria-expanded', 'false'); $('show-inspector').focus(); break;
     case 'show-diagnostics': $('diagnostics').hidden = !$('diagnostics').hidden; target.setAttribute('aria-expanded', String(!$('diagnostics').hidden)); break;
@@ -246,6 +312,7 @@ $('app').addEventListener('input', event => {
   const input = event.target as HTMLInputElement;
   if (input.type !== 'range') return;
   const value = Number(input.value);
+  pendingControls.set(input.id, engine.tick + 1);
   const units: Record<string, string> = { rate: ' /s', slow: '%', 'slow-seconds': ' s', jitter: '%', capacity: ' /s', admission: '', 'redis-incr': ' ms', 'redis-publish': ' ms', 'redis-rtt': ' ms' };
   $(`${input.id}-value`).textContent = `${value}${units[input.id] ?? ''}`;
   const backend = Number(selected.slice(3));
@@ -263,7 +330,9 @@ $('app').addEventListener('input', event => {
 });
 $('app').addEventListener('change', event => {
   const input = event.target as HTMLInputElement;
+  if (input.type === 'checkbox') pendingControls.set(input.id, engine.tick + 1);
   switch (input.id) {
+    case 'scenario': if (input.value) startExperiment(input.value as ScenarioId); else { experiment = undefined; update(); } break;
     case 'inspect-component': if (input.value) select(input.value as ComponentId); break;
     case 'retry': issue({ type: 'retry', enabled: input.checked }); break;
     case 'redis-online': issue({ type: 'redis', online: input.checked }); break;
@@ -291,8 +360,8 @@ let previous: number | undefined;
 function frame(now: number): void {
   const elapsed = previous === undefined ? 0 : now - previous; previous = now;
   const result = clock.consume(elapsed, 20);
-  if (result.behind) feedback('Playback is catching up. All modeled requests are retained.');
-  campus.render(engine.now);
+  if (result.behind && !clock.paused) feedback('Playback is catching up. All modeled requests are retained.');
+  campus.render(engine.now + (clock.paused ? 0 : clock.interpolationUs));
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
