@@ -16,3 +16,11 @@ Added Vite/TypeScript, exact dependency lockfile, integer event scheduler, seede
 - #20: isolated CI/Pages build, publication eligibility, live smoke, README screenshot/link.
 
 Live tracker checked 5 November 2026: all six issues open. Repository is private; Pages is not enabled. No visibility change has been made.
+
+## Pass 2 — cluster resources and failure boundaries
+
+Implemented root/slow request paths, round-robin routing, CPU queues, independent sleeps, Redis FIFO execution/transport, bounded admissions, passive failure knowledge, three total proxy attempts, coordinated drain/removal, process restart, and frozen snapshots. Redis accepted work remains alive when its caller disappears. Commands are recorded at tick boundaries.
+
+Validation: `npm test` passes **32 tests**; `npm run build` passes type checking and production bundling. Tests include healthy distribution and counters, overload and scaling, CPU/transport separation, capacity changes in flight, all-down/single-upstream behavior, HTTP 500 without retry, drained routing withdrawal, repeated removal, replay equality, independent offered streams, sustained overload bounds, exact commit/deadline ordering, post-commit retry, retained replies, detached operations, and the 12 s drain budget. The drain-routing regression found during this pass is fixed and covered.
+
+Issue #15 still needs its final acceptance audit alongside playback/reset integration; no issue has been closed yet. Initial build contains a placeholder page until the campus pass.
