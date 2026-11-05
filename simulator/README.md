@@ -30,18 +30,16 @@ report. It is separate from the quick unit suite.
 
 ## GitHub Pages
 
-The project base is `/docker-based-multiserver-system/`. The intended URL is
-`https://kajuyerim.github.io/docker-based-multiserver-system/`; publication and a
-successful live check are required before treating it as deployed.
+The project base is `/docker-based-multiserver-system/`. Open the
+[published simulator](https://kajuyerim.github.io/docker-based-multiserver-system/).
 
-The repository is private. [GitHub Pages eligibility](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages)
-requires GitHub Pro for a personal private repository (or an eligible organization
-plan). Free accounts support Pages from public repositories. Enabling a public
-Pages site does not require making an eligible private repository public. The
-published site is visible to visitors even when source access is private.
+The repository is public, with publication explicitly authorized for this portfolio
+project. [GitHub Pages eligibility](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages)
+allows public repositories on GitHub Free. A personal private repository requires
+GitHub Pro; the initial private-repository deployment was rejected by the account's
+plan. Academic identifiers are absent from the README; submission metadata stays
+local and ignored.
 
-Do not change repository visibility as part of deployment. The root README contains
-academic identifiers, and repository publication is a separate user decision.
 The workflow uploads **only `simulator/dist`**, excluding root documentation,
 reports, credentials, source maps, and local metadata. The generated model text and
 third-party license notices are intentional public files.

@@ -17,7 +17,7 @@ Added Vite/TypeScript, exact dependency lockfile, integer event scheduler, seede
 
 Live tracker checked 5 November 2026: all six issues open. Repository is private; Pages is not enabled. No visibility change has been made.
 
-Latest status: implementation and local acceptance for #15–#19 are complete. The PR/CI review and #20's publication/live verification remain. Automatic approval review rejected the exact Pages enablement action because public hosting needs specific user approval. No Pages setting was changed.
+Latest status: implementation and local acceptance for #15–#19 are complete. PR #43 passed simulator and full repository CI on `26bea2f`. The user explicitly approved public hosting and then publication of the whole repository. The repository is now public and Pages is enabled with the GitHub Actions source. Release documentation checks, merge, deployment, live verification, and #20 closure remain.
 
 ## Pass 2 — cluster resources and failure boundaries
 
@@ -72,3 +72,11 @@ Independent UI review found three issues: a pinned older trace could be selected
 A useful matched comparison was also verified in the production browser: with 120 offered requests/s, adding two backends increased successful throughput from 50.5 to 119.9/s and reduced failures from 1,041 to zero during the same 5–20 s window (1,799 completed samples in each run). Average latency fell from 1,076.5 to 46.1 ms; p95 fell from 2,560.4 to 48.7 ms. These are teaching-model measurements, not deployment benchmarks.
 
 The final targeted source review found no further issues. Local validation remains 61 passing tests, one intentionally skipped opt-in performance test, and a successful type-check/production build. Draft PR #43 contains the implementation; publication remains pending the approval and eligibility gates above.
+
+## Pass 8 — public release preparation
+
+The final implementation commit `26bea2f` passed Simulator CI `41926165052` (61 tests and production build) and full repository CI `41926165049` (Kubernetes, security gates, race tests, integrations, and sustained HTTPS load). The load run completed 68,770 iterations with zero unexpected errors or consistency failures and 100% functional checks.
+
+On 5 November 2026 the user explicitly approved public hosting. GitHub rejected Pages for the private repository because of the account plan. The user then explicitly authorized making the entire portfolio repository public. Before changing visibility, checked all 18 README revisions for academic identifiers, the historical submission template for real values, and tracked files for credential patterns. No academic IDs or credential-pattern matches were found; the older local handoff note about README IDs was stale. Local metadata and submission files remain untracked/ignored.
+
+Repository publication and Pages enablement succeeded. The configured URL is `https://kajuyerim.github.io/docker-based-multiserver-system/`, with `build_type=workflow` and public access. The release documentation now links that destination. Deployment and direct live acceptance will be verified after merge.
