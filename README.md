@@ -8,6 +8,32 @@
 
 ---
 
+## Interactive simulator
+
+Operate a browser-only model of the same architecture: change traffic, scale the
+backends, stop or drain a process, and expose the shared Redis bottleneck. The
+full-screen scene includes component inspection, request traces, four guided
+experiments, and a comparison against one saved workload baseline.
+
+[Open the interactive simulator](https://kajuyerim.github.io/docker-based-multiserver-system/)
+
+![Interactive multiserver simulation](docs/images/simulator.jpg)
+
+The capacities are **educational values**, not measurements of this deployment.
+See the [model contract](simulator/MODEL.md) and [local simulator instructions](simulator/README.md).
+GitHub Pages serves the static simulator. No backend process, credentials, or
+connection to a visitor's Docker environment is required.
+
+```sh
+cd simulator
+npm ci
+npm run dev
+```
+
+Open `http://127.0.0.1:5173/docker-based-multiserver-system/` for local development.
+
+---
+
 ## Quick start
 
 ```bash
