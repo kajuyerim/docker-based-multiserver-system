@@ -52,6 +52,7 @@ $('app').innerHTML = `
   <div class="scene-legend" aria-label="Scene legend" data-scene-overlay><span><i style="background:#287f83"></i>Active</span><span><i style="background:#b88029"></i>Queueing</span><span><i style="background:#7763a3"></i>Draining</span><span><i style="background:#a64a42"></i>Stopped</span><span>≤200 sampled flow markers</span><span id="render-rate"></span></div>
   <section id="experiment-panel" class="experiment-panel overlay" aria-label="Guided experiment" data-scene-overlay hidden><div><div class="panel-heading"><h2 id="experiment-title"></h2><button data-reading aria-expanded="false">Read details</button><button id="collapse-experiment" aria-label="Collapse experiment">×</button></div><p id="experiment-setup"></p><p id="experiment-goal"></p><p id="experiment-evidence"></p></div><div class="experiment-actions"><button id="experiment-action"></button><button id="experiment-reset">Reset experiment</button><button id="experiment-exit">Free running</button></div></section>
   <footer class="transport-bar" aria-label="Playback" data-scene-overlay>
+    <nav id="map-navigation" aria-label="Map navigation" aria-describedby="map-help" tabindex="0"><button data-map="out" aria-label="Zoom out">−</button><output id="map-zoom" aria-label="Map zoom relative to fit">100%</output><button data-map="in" aria-label="Zoom in">+</button><button data-map="focus">Focus selected</button><button data-map="fit">Fit map</button></nav>
     <div class="transport-controls"><button id="pause">Ⅱ Pause</button><button id="step">Step</button><label class="sr-only" for="speed">Playback speed</label><select id="speed"><option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select><button id="reset">↻ Reset</button><button id="fresh-settings">Run current settings</button></div>
     <div class="transport-context"><label for="scenario">EXPERIMENT</label><select id="scenario"><option value="">Free running</option>${SCENARIOS.map(s => `<option value="${s.id}">${s.title}</option>`).join('')}</select><button id="show-experiment" aria-controls="experiment-panel" aria-expanded="false" hidden>Details</button><span id="metric-window">5 s rolling window</span></div><a href="${import.meta.env.BASE_URL}model.txt" target="_blank" rel="noreferrer">Model ${MODEL_VERSION} ↗</a>
   </footer>
@@ -81,6 +82,10 @@ let pendingFeedbackTick = 0;
 const pendingControls = new Map<string, number>();
 let lastTopology = '';
 const campus = new Campus();
+const mapHelp = document.createElement('p');
+mapHelp.id = 'map-help';
+mapHelp.textContent = 'Drag the map to pan; scroll or pinch to zoom. In Map navigation, use arrows to pan, +/− to zoom, Home to fit, and Escape to cancel movement. Focus selected brings the inspected component into view.';
+$('intro-dialog').insertBefore(mapHelp, $('intro-dialog').querySelector('.guide-links'));
 const media = matchMedia('(prefers-reduced-motion: reduce)');
 $('reduced-motion').toggleAttribute('checked', media.matches);
 const clock = new Clock(() => {
@@ -376,6 +381,7 @@ try {
   update();
   $('app').dataset.ready = 'ready';
 } catch (error) {
+  $('map-navigation').hidden = true;
   $('campus').innerHTML = '<p style="padding:30px">The visual campus could not start. All controls, metrics, and the system summary below remain available.</p>';
   console.error(error);
   $('app').dataset.ready = 'fallback';

@@ -1,8 +1,11 @@
 import { Application, Container, Graphics } from 'pixi.js';
 import type { BackendSnapshot, SemanticEvent, Snapshot } from '../model/types';
-import { fitScene, placeLabel } from './layout';
+import { overlaps, placeLabel } from './layout';
 import type { Rect } from './layout';
 import { SceneLayout } from '../ui/scene-layout';
+import { Viewport } from './viewport';
+import type { ViewportState } from './viewport';
+import { MapNavigation } from '../ui/map-navigation';
 
 export type ComponentId = 'clients' | 'nginx' | 'redis' | `app${number}`;
 type Point = { x: number; y: number };
@@ -33,6 +36,10 @@ export class Campus {
   private host?: HTMLElement;
   private area: Rect = { x: 0, y: 0, width: 1, height: 1 };
   private selected: ComponentId = 'nginx';
+  private view = new Viewport();
+  private navigation?: MapNavigation;
+  private renderedAt?: number;
+  private renderDirty = true;
 
   async mount(host: HTMLElement, onSelect: (id: ComponentId) => void, onRequest: (id: number) => void): Promise<void> {
     this.host = host;
@@ -61,11 +68,11 @@ export class Campus {
       caption.className = 'component-label';
       caption.dataset.sceneComponent = id;
       caption.innerHTML = `<strong>${label}</strong><span></span>`;
-      caption.addEventListener('click', () => onSelect(id));
+      caption.addEventListener('click', event => { if (!event.detail || this.navigation?.canSelect(event)) onSelect(id); });
       host.append(caption);
       container.addChild(shape);
       container.eventMode = 'static'; container.cursor = 'pointer';
-      container.on('pointertap', () => onSelect(id));
+      container.on('pointertap', event => { if (this.navigation?.canSelect(event.nativeEvent as PointerEvent)) onSelect(id); });
       this.world.addChild(container);
       this.buildings.set(id, { container, shape, label: caption, status: '', point, color: -1 });
     };
@@ -77,15 +84,19 @@ export class Campus {
       const marker = new Graphics().circle(0, 0, 4).fill(0xffffff).stroke({ width: 2, color: colors.green });
       marker.zIndex = 1;
       marker.visible = false; marker.eventMode = 'static'; marker.cursor = 'pointer';
-      marker.on('pointertap', () => { if (marker.label) onRequest(Number(marker.label)); });
+      marker.on('pointertap', event => {
+        if (marker.label && this.navigation?.canSelect(event.nativeEvent as PointerEvent)) onRequest(Number(marker.label));
+      });
       this.markers.push(marker); this.world.addChild(marker);
     }
+    this.navigation = new MapNavigation(host, document.getElementById('map-navigation')!, this.view, {
+      changed: () => this.applyViewport(), focusTarget: () => this.componentBounds(this.selected), reduced: () => this.reduced,
+    });
     await new Promise<void>(resolve => {
       this.layout = new SceneLayout(host, area => {
         this.area = area;
         this.app.renderer.resize(host.clientWidth, host.clientHeight);
-        this.fit();
-        this.render();
+        this.reframe();
         resolve();
       });
     });
@@ -117,7 +128,7 @@ export class Campus {
       path(this.point('clients'), this.point('nginx'));
       for (const b of snapshot.backends) { path(this.point('nginx'), this.point(`app${b.id}`)); path(this.point(`app${b.id}`), this.point('redis')); }
       for (const marker of this.markers) this.world.addChild(marker);
-      this.fit();
+      this.reframe();
     }
     this.paint('clients', colors.blue, `${snapshot.config.rate} offered /s`);
     this.paint('nginx', colors.green, snapshot.config.retry ? 'Retries enabled' : 'Retries disabled');
@@ -131,11 +142,14 @@ export class Campus {
     const point = this.point(selected);
     this.selection.clear().ellipse(point.x, point.y + 12, 78, 43).stroke({ color: 0xe5f3ec, width: 2, alpha: 0.9 });
     this.labels();
+    this.renderDirty = true;
   }
 
   render(displayTime = this.snapshot?.now ?? 0): void {
     const snapshot = this.snapshot;
     if (!snapshot || !this.ready) return;
+    if (!this.renderDirty && (displayTime === this.renderedAt || this.reduced)) return;
+    this.renderDirty = false; this.renderedAt = displayTime;
     const events = snapshot.events.filter(e => e.request !== undefined && displayTime - e.at >= 0 && displayTime - e.at < 400_000 && this.segment(e));
     const selected = events.slice(-200);
     this.markers.forEach((marker, index) => {
@@ -153,21 +167,41 @@ export class Campus {
   }
 
   destroy(): void {
+    this.navigation?.destroy();
     this.layout?.destroy();
     for (const b of this.buildings.values()) b.label.remove();
     this.app.destroy(true, { children: true });
   }
 
-  private fit(): void {
+  saveView(): ViewportState { return this.view.save(); }
+  restoreView(state: ViewportState): void { this.navigation?.cancel(); this.view.restore(state); this.applyViewport(); }
+  fitMap(): void { this.navigation?.fit(); }
+
+  private componentBounds(id: ComponentId): Rect {
+    const p = this.point(id);
+    return { x: p.x - 85, y: p.y - 85, width: 170, height: 140 };
+  }
+
+  private reframe(): void {
+    this.navigation?.cancel();
     const points = [...this.buildings.values()].map(b => b.point);
     if (!points.length) return;
     const x = Math.min(...points.map(p => p.x)) - 90, y = Math.min(...points.map(p => p.y)) - 100;
     const bounds = { x, y, width: Math.max(...points.map(p => p.x)) + 125 - x,
       height: Math.max(...points.map(p => p.y)) + 90 - y };
-    const transform = fitScene(bounds, this.area, 30);
+    this.view.context(bounds, this.area, [...this.buildings.keys()].map(id => this.componentBounds(id)));
+    this.applyViewport();
+  }
+
+  private applyViewport(): void {
+    const transform = this.view.transform;
     this.world.scale.set(transform.scale);
     this.world.position.set(transform.x, transform.y);
+    this.renderDirty = true;
     this.labels();
+    const zoom = document.getElementById('map-zoom');
+    if (zoom) zoom.textContent = `${Math.round(this.view.zoom * 100)}%`;
+    this.render();
   }
 
   private labels(): void {
@@ -192,6 +226,7 @@ export class Campus {
       label.setAttribute('aria-label', `${id === 'clients' ? 'Clients' : id === 'nginx' ? 'NGINX' : id === 'redis' ? 'Redis' : id}: ${building.status}. Inspect component`);
       const anchor = { x: this.world.x + (building.point.x - 85) * scale,
         y: this.world.y + (building.point.y - 85) * scale, width: 170 * scale, height: 140 * scale };
+      if (!overlaps(anchor, area)) { label.hidden = true; collapsed++; continue; }
       const size = { width: label.offsetWidth, height: label.offsetHeight };
       const placement = placeLabel(anchor, size, area, occupied, isSelected || attention);
       const budget = area.width * area.height * 0.22;

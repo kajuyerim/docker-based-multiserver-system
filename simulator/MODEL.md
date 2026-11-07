@@ -101,6 +101,43 @@ baseline survives either reset until explicitly cleared or the page reloads.
 
 All buildings, paths, and markers are original procedural geometry. System fonts require no remote font request. PGSimCity informed the scene-first layout and contextual inspection approach; no game assets, branding, or source were copied. The build includes dependency licenses in `notices.txt`.
 
+### Map navigation
+
+Scale/translation, active pointers and focus animation are presentation state. They
+never enter the engine, command history or workload RNG. Navigation works while
+paused. Primary/middle drag crosses a 5 CSS-pixel threshold; a drag or any two-finger
+gesture suppresses associated selections. The map captures pointers and clears them
+on release, cancellation, lost capture, blur and disposal. Extra contacts are ignored
+instead of replacing either pinch contact. Panels own gestures that start on them.
+
+Wheel deltas use pixels, 16 pixels per line, or the scene height per page. Each event
+is capped at ±120 pixels before exponential scaling, avoiding a large single jump.
+Ctrl/Cmd wheel remains browser-owned. Inputs convert client coordinates to local CSS
+pixels without multiplying by device pixel ratio. Cursor/pinch world anchors are
+preserved to floating-point precision in the geometry tests (browser interpretation
+allows 1 CSS pixel), except when a scale or translation bound applies. Zoom buttons
+use the measured unobscured scene center.
+
+Zoom is limited to 0.75–4× the current topology's fit scale. Smaller maps center in
+the available area; larger maps allow bounded exploration. At least one component
+center stays 32 CSS pixels inside the scene (or a quarter of a very small scene).
+Manual framing preserves the world point beneath the old scene center through a
+resize/panel change, adjusted for necessary scale/translation bounds. Topology
+changes use the same rule; overview mode instead refits all active components.
+Only components intersecting the visible scene receive labels; Inspect component
+and Focus selected recover any offscreen selection. Visible text remains 12 px.
+
+Focus selected frames the inspected component with a 160 ms presentation transition.
+Direct input interrupts it at its current position; reduced motion applies it
+immediately. Fit map/Home returns to overview. Keyboard arrows and +/− are scoped
+to the native map-navigation region, leaving form keys and browser shortcuts alone.
+Rendering is coalesced to at most one update per input frame, reusing scene objects.
+
+The viewport exposes save/restore operations for #52's later component interiors;
+restoration preserves the prior campus framing, subject to changed bounds. The
+current UI only has the campus. S2 must call these operations on entry/Back and make
+Fit map/Home exit its interior. No interior navigation is claimed in this slice.
+
 ## Performance evidence
 
 On an Apple M5 Pro (macOS arm64, Node 22.23.1), the optional 15-minute model benchmark offered 450,009 requests at 500/s with eight replicas. It alternated default Redis service, extreme Redis execution/transport delays, and 100% ten-second slow requests. The run took 8.92 seconds of wall time, with 1.89 ms p95 for snapshot creation plus metrics. Peak retained state was 2,048 requests, 2,048 operations, 600 events, 100 traces, 4,108 scheduled events, and 4,093 rolling completions. All pending requests and operations drained after arrivals stopped. This is a model/runtime check on one machine, not a claim about real NGINX or Redis capacity or all devices.

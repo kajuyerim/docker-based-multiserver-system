@@ -27,6 +27,10 @@ test('baseline and candidate compare the same observed window', async ({ page })
   await expect(page.locator('#sim-time')).toHaveText('0.00 s');
   await expect(page.locator('#playback-state')).toHaveText('Paused');
   await page.locator('#pause').click();
+  await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
+  await page.locator('#map-navigation').focus(); await page.keyboard.press('ArrowRight');
+  await page.getByRole('button', { name: 'Focus selected', exact: true }).click();
+  await page.getByRole('button', { name: 'Fit map', exact: true }).click();
   await expect(page.locator('#comparison-result')).toContainText('Identical settings and interventions', { timeout: 40_000 });
   await expect(page.locator('#comparison-result .comparison-error')).toHaveCount(0);
   const rows = page.locator('#comparison-result tbody tr');
