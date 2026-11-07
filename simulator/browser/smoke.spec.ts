@@ -49,7 +49,9 @@ test('production scene, disclosures, keyboard and lifecycle controls', async ({ 
   await page.emulateMedia({ reducedMotion: 'reduce' });
   await activate(page.getByText('Workload settings', { exact: true }));
   await expect(page.getByLabel('Reduce motion', { exact: true })).toBeChecked();
-  await activate(page.getByText('Workload settings', { exact: true }));
+  await activate(page.locator('#close-workload'));
+  await expect(page.locator('#workload-settings')).not.toHaveAttribute('open');
+  await expect(page.locator('#workload-settings summary')).toBeFocused();
   await actionable(page.locator('#pause'));
   await activate(page.getByRole('button', { name: 'Focus selected', exact: true }));
   await expect.poll(async () => Number.parseInt(await page.locator('#map-zoom').innerText())).toBeGreaterThan(100);

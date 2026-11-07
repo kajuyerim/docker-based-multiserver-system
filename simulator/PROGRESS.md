@@ -272,3 +272,12 @@ model work, rendering, assertions, timeouts or retries are skipped or changed. A
 ten request journeys and typecheck passed after this harness-only correction.
 Full repository CI 42415780219 passed on the unchanged application source. A new
 fresh exact-head review and browser CI are required before merge.
+
+A fresh full run of the paced head passed all 46 Chromium checks and WebKit phone,
+but desktop WebKit reported an intermittent injected hit-target exception while
+closing the scrolled workload disclosure. Functional assertions completed; three
+unchanged diagnostic repetitions passed, so that did not establish a clean full
+run. The smoke journey now uses the existing explicit Return to map button and
+asserts both disclosure closure and summary focus. Three desktop and three phone
+WebKit runs passed with error collection intact, plus typecheck. No application
+source changed. A clean complete run and fresh exact-head review remain required.
