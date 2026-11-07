@@ -44,4 +44,9 @@ test('production scene, disclosures, keyboard and lifecycle controls', async ({ 
   await expect(page.getByLabel('Reduce motion', { exact: true })).toBeChecked();
   await page.getByText('Workload settings', { exact: true }).click();
   await actionable(page.locator('#pause'));
+  await page.getByRole('button', { name: 'Focus selected', exact: true }).click();
+  await expect.poll(async () => Number.parseInt(await page.locator('#map-zoom').innerText())).toBeGreaterThan(100);
+  await actionable(page.locator('[data-scene-component="app1"]'));
+  await page.getByRole('button', { name: 'Fit map', exact: true }).click();
+  await expect(page.locator('#map-zoom')).toHaveText('100%');
 });

@@ -152,3 +152,43 @@ artifact hashes match that source. The expanded suite now has a 600 s overall bo
 and a 15-minute job bound for setup/artifact overhead. Individual test/action/assertion
 timeouts, one worker, assertions and zero retries are unchanged. A complete fresh
 hosted pass and review of the updated head remain required before merge.
+
+## S1 / #55 — map navigation (7 November 2026)
+
+Added a presentation-only viewport and shared gesture coordinator: primary/middle
+pan, cursor-centered wheel zoom, one-finger pan, moving-centroid pinch, native
+zoom/focus/fit controls and scoped keyboard navigation. Drag and multi-touch suppress
+selection. Capture loss, cancellation, blur and disposal clear active gestures.
+Manual framing survives panel/size/topology changes within documented limits; focus
+is interruptible and reduced motion removes its transition. Labels follow the view,
+retain 12 px text, and omit offscreen components recoverable through the selector.
+Save/restore operations are ready for S2 interiors; interiors themselves remain S2.
+
+Validation: 75 model/view/gesture/lifecycle tests passed (one opt-in benchmark
+skipped), production build/typecheck passed, and the complete 35-test Chromium run
+passed in 107.7 s without retries. The nine viewport/replica journeys add pan, zoom,
+selection, an operational change, focus, fit and orientation/panel changes. A matched
+baseline/candidate comparison remains identical with navigation input during the
+candidate. Browser-emulated touch covers pinch, contact changes and cancellation;
+keyboard/form/modified-wheel checks and panel scrolling preserve native behavior.
+WebKit desktop/phone navigation smoke passed 2/2 in 3.3 s. Settled-focus screenshots
+were subsequently captured by a passing nine-case matrix run (50.6 s).
+
+Real Chromium tab zoom at 200% exposed a short-landscape layout gap; extending that
+layout to 540 px kept controls and focused components visible at 640×360 CSS pixels.
+The full browser also exposed a missing implicit favicon request; the site now serves
+an original SVG icon. A temporary-profile test extension drives the browser's zoom
+API and verifies the factor/viewport; it is not part of the published bundle.
+Phone toolbar rows are fixed so Pause/Resume label widths cannot consume the map's
+reserved half-area. Native browser zoom is verified; touchscreen checks are emulated,
+not physical-device claims. Pure geometry tests also cover coordinate conversion,
+anchor precision, bounds, lifecycle cleanup and interruption. Input rendering is
+coalesced and reuses the scene's existing objects.
+
+Inspected the nine focus screenshots plus the settled crowded phone/tablet/desktop
+views and real 200% zoom capture. Reports/screenshots are under
+/tmp/s1-55-full-chromium, /tmp/s1-55-webkit and /tmp/s1-55-settled-focus with source,
+bundle and lock hashes. The final 16 expanded experiment-panel, scroll, layout and
+input journeys also passed without retries. Fresh PR review and hosted CI remain
+the delivery gates. The diff does not change engine
+scheduling, backend handlers, proxy or containers; pitfall review passed.

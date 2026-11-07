@@ -1,5 +1,6 @@
 import { test, expect, open, pause, actionable } from './fixtures';
 import type { Page } from '@playwright/test';
+import { navigationJourney } from './navigation-journey';
 
 async function sceneIsClear(page: Page, selected: string): Promise<void> {
   const label = page.locator(`[data-scene-component="${selected}"]`);
@@ -66,6 +67,7 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 768, height: 1024 
       await sceneIsClear(page, 'redis');
       expect(await page.locator('#sim-time, #global').allTextContents()).toEqual(before);
       expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+      await navigationJourney(page, info);
     });
   }
 }

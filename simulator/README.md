@@ -30,6 +30,13 @@ report. It is separate from the quick unit suite.
 
 ## Browser acceptance
 
+Drag the map with the primary/middle mouse button or one finger; ordinary wheel
+scroll zooms toward the cursor and two fingers pinch about their moving midpoint.
+The visible map controls provide zoom, Focus selected and Fit map. Focus that
+navigation region to use arrows, +/− and Home; Escape cancels movement. Selection
+alone preserves manual framing. The Guide also describes these controls. Ctrl/Cmd
+wheel and browser zoom remain available; panels retain their native scrolling.
+
 From this directory, test the actual production bundle at its repository base path:
 
 ```sh
@@ -71,6 +78,13 @@ unobscured scene, panel switching, reading-view return, orientation changes, and
 unchanged model time/counters. Phone/tablet exploration keeps half the viewport for
 the scene. Labels stay at least 12 px; use Inspect component for any omitted label.
 Screenshots still need visual inspection for meaningful building/path readability.
+
+Navigation journeys also exercise drag-versus-selection, native form keys, touch
+contact changes/cancellation, focus/fit, and a matched comparison with navigation
+input. The 200% page-zoom check uses Chromium's real tab zoom API through a tiny
+test-only extension in an isolated temporary browser profile; it asserts the
+resulting CSS viewport as well as usable controls. That extension is never included
+in the site bundle or installed into a personal browser profile.
 
 ## GitHub Pages
 
