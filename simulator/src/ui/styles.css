@@ -77,9 +77,6 @@ details summary { cursor: pointer; font-size: 10px; color: #53636e; padding: 4px
 .checkbox { display: flex; align-items: center; gap: 7px; margin: 14px 0; font-size: 11px; }
 .muted { color: var(--muted); }
 .small { font-size: 10px; }
-.scene-caption { position: fixed; left: 252px; top: 143px; pointer-events: none; color: #364e5c; }
-.scene-caption > span { font: 10px var(--mono); letter-spacing: 2px; }
-.scene-caption p { font-size: 10px; margin-top: 6px; color: #506875; }
 .scene-legend { position: fixed; left: 18px; bottom: 75px; display: flex; gap: 13px; flex-wrap: wrap; color: #354e5d; font-size: 9px; pointer-events: none; }
 .scene-legend i { display: inline-block; width: 7px; height: 7px; margin-right: 5px; border: 1px solid #42566433; }
 .feedback { position: fixed; bottom: 97px; left: 18px; max-width: 460px; font-size: 10px; color: #324e60; pointer-events: none; }
@@ -156,4 +153,76 @@ dialog > button { margin-top: 17px; border-color: #a0afb6; }
   .inspect-picker select { padding: 2px; min-height: 24px; }
   .inspector, .comparison-panel { top: 280px; max-height: calc(100dvh - 350px); }
   .inspector { width: min(300px, calc(100vw - 12px)); }
+}
+
+.traffic-panel, .inspector, .comparison-panel { top: var(--hud-bottom, 132px); }
+.feedback, .in-experiment .feedback { position: static; max-width: none; margin-top: 8px; pointer-events: auto; display: block; }
+.component-label { position: absolute; z-index: 3; padding: 4px 7px; min-height: 26px; width: max-content; max-width: 205px;
+  border: 1px solid #6f858e; border-left: 3px solid #287f83; background: #f5f5ef; color: #253744;
+  font-size: 12px; line-height: 1.3; text-align: center; box-shadow: 0 2px 3px #25374418; }
+.component-label strong { display: block; font-size: 12px; font-weight: 650; }
+.component-label span { display: none; font-size: 12px; color: #485b65; }
+.component-label.detailed span { display: block; }
+.component-label[aria-pressed=true] { outline: 2px solid #216392; outline-offset: 2px; background: #fff; }
+[data-reading] { display: inline-block; }
+.diagnostics, .comparison-panel { top: auto; left: 240px; right: 12px; width: auto;
+  bottom: calc(var(--transport-height, 56px) + 8px); max-height: 36dvh; }
+.reading-panel .inspector, .reading-panel .comparison-panel, .reading-panel .diagnostics, .reading-panel .experiment-panel {
+  top: var(--hud-bottom, 132px); bottom: calc(var(--transport-height, 56px) + 8px); max-height: none;
+  overflow-y: auto; z-index: 14; }
+#close-workload { margin: 5px 0; border-color: var(--line); }
+#label-help { margin-top: 10px; line-height: 1.4; }
+.panel-heading { position: sticky; top: -1px; background: var(--panel); z-index: 1; }
+.panel-heading h2 { margin-right: auto; }
+.panel-heading > [data-reading] { font-size: 11px; min-height: 28px; padding: 3px; }
+.experiment-panel > div:first-child { min-width: 0; flex: 1; }
+.experiment-panel .panel-heading { padding-bottom: 4px; margin-bottom: 5px; }
+@media (max-width: 1024px) {
+  .vitals { justify-content: flex-start; }
+  .traffic-panel { top: var(--hud-bottom, 116px); left: 6px; right: 6px; width: auto;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; padding: 5px 10px; max-height: 140px; }
+  .traffic-panel .panel-heading, .traffic-panel .range-ends, #label-help { display: none; }
+  .traffic-panel > .control { margin: 3px 0; }
+  .traffic-panel input[type=range] { margin-top: 5px; margin-bottom: 0; }
+  .traffic-panel > details { align-self: center; }
+  .traffic-panel > details[open] { grid-column: 1 / -1; }
+  .inspect-picker { grid-column: 2; margin: 0; padding: 0; border: 0; }
+  .inspect-picker label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }
+  .inspect-picker select { padding: 2px; min-height: 24px; font-size: 11px; }
+  .inspector, .comparison-panel, .diagnostics, .experiment-panel { top: auto; left: 6px; right: 6px;
+    bottom: calc(var(--transport-height, 70px) + 8px); width: auto; max-height: var(--sheet-height, 110px);
+    padding: 6px 10px; overflow-y: auto; }
+  .experiment-panel { display: block; }
+  .experiment-actions { flex-direction: row; flex-wrap: wrap; }
+  .component-nav { padding: 4px 0; gap: 3px; }
+  .panel-heading { padding-bottom: 4px; gap: 8px; }
+  [data-reading] { display: inline-block; }
+  .reading-panel .inspector, .reading-panel .comparison-panel, .reading-panel .diagnostics, .reading-panel .experiment-panel {
+    top: var(--hud-bottom, 116px); max-height: none; z-index: 14; }
+  .reading-workload .traffic-panel { bottom: calc(var(--transport-height, 70px) + 8px); max-height: none; display: block; z-index: 15; }
+  .feedback, .in-experiment .feedback { grid-column: 1 / -1; margin-top: 3px; white-space: nowrap; overflow-x: auto; }
+  .scene-legend { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+    overflow: hidden; clip: rect(0,0,0,0); }
+  .instrument-bar { top: 6px; left: 6px; right: 6px; }
+  .transport-bar { left: 6px; right: 6px; bottom: 6px; }
+}
+@media (orientation: landscape) and (max-height: 540px) and (min-width: 760px) {
+  .instrument-bar { width: 230px; right: auto; grid-template-columns: 1fr; }
+  .identity { padding: 6px 10px; flex-wrap: nowrap; }
+  .identity #sim-time { margin-left: auto; }
+  .vitals { justify-content: flex-start; }
+  .vital { min-width: 105px; padding: 4px 8px; }
+  .utility-row { flex-wrap: wrap; padding: 3px 6px; }
+  .model-disclosure span { display: none; }
+  .utility-row button { padding: 3px 7px; }
+  .traffic-panel { width: 230px; right: auto; }
+  .inspector, .comparison-panel, .diagnostics, .experiment-panel { left: 6px; right: auto; width: 230px;
+    top: var(--traffic-bottom, 230px); bottom: 6px; max-height: none; }
+  .transport-bar { left: 244px; flex-wrap: wrap; gap: 0; }
+  .transport-controls { gap: 0; }
+  .transport-controls button { padding: 4px; }
+  .transport-context { border: 0; padding: 0; }
+  .transport-bar > a { display: none; }
+  .reading-panel .inspector, .reading-panel .comparison-panel, .reading-panel .diagnostics, .reading-panel .experiment-panel {
+    left: 6px; right: 6px; top: 6px; bottom: 6px; width: auto; }
 }

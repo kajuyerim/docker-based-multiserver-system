@@ -29,7 +29,7 @@ export class ComparisonPanel {
     pause: () => void;
     feedback: (message: string) => void;
   }) {
-    root.innerHTML = `<div class="panel-heading"><h2>COMPARE RUNS</h2><button data-compare="close" aria-label="Close comparison">×</button></div>
+    root.innerHTML = `<div class="panel-heading"><h2>COMPARE RUNS</h2><button data-reading aria-expanded="false">Read details</button><button data-compare="close" aria-label="Close comparison">×</button></div>
       <p class="comparison-intro">Save one complete run. Replay its workload and interventions, change an operating setting, then compare the same 15-second window.</p>
       <p id="comparison-status" role="status"></p>
       <div class="comparison-actions"><button data-compare="save">Save baseline</button><button data-compare="replace" hidden>Replace baseline</button><button data-compare="prepare" disabled>Prepare candidate</button><button data-compare="clear" disabled>Clear baseline</button></div>

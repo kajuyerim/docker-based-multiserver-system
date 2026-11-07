@@ -66,9 +66,11 @@ The workflow uploads these reports and viewport screenshots for 14 days and gate
 Pages deployment on the browser job as well as model tests/build.
 
 Keep manual visual review for art quality, scene readability and device performance.
-The baseline panel screenshots expose the existing scene-occlusion problem tracked
-in #45; its geometry checks build on this suite. A passing controls test does not
-claim that every canvas label is unobscured.
+Geometry journeys also check each selected component label against the measured
+unobscured scene, panel switching, reading-view return, orientation changes, and
+unchanged model time/counters. Phone/tablet exploration keeps half the viewport for
+the scene. Labels stay at least 12 px; use Inspect component for any omitted label.
+Screenshots still need visual inspection for meaningful building/path readability.
 
 ## GitHub Pages
 
