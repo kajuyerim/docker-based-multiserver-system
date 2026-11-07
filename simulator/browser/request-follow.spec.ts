@@ -12,8 +12,11 @@ async function range(page: Page, id: string, value: number): Promise<void> {
 async function steps(page: Page, count: number): Promise<void> {
   await expect(page.locator('#playback-state')).toHaveText('Paused');
   await expect(page.locator('#step')).toBeEnabled();
-  await page.locator('#step').evaluate((button, ticks) => {
-    for (let i = 0; i < ticks; i++) (button as HTMLButtonElement).click();
+  await page.locator('#step').evaluate(async (button, ticks) => {
+    for (let i = 0; i < ticks; i++) {
+      (button as HTMLButtonElement).click();
+      await new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+    }
   }, count);
 }
 

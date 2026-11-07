@@ -257,3 +257,18 @@ unchanged. A regression first reproduced the bug, then passed for retries enable
 and disabled, including historical warnings and absent old-process path segments.
 All 85 unit/view checks, build/typecheck, and seven targeted retry/INCR/Chromium/
 WebKit browser checks pass. A new fresh review is required on the corrected head.
+
+Hosted browser run 42415780253 passed 45/46 checks but timed out capturing the
+recovered queue scene after all state assertions passed. Its downloaded artifact
+13590918960 matched GitHub's SHA-256 and the reviewed source/bundle/lock hashes.
+The trace showed 199 synchronous Step actions in 825 ms, a WebGL queue warning,
+and subsequent rendering delay. A controlled unchanged-bundle comparison at 4×
+CPU throttling performed the same 2,266 draw calls and produced identical final
+evidence; yielding between steps allowed 199 animation frames instead of zero and
+reduced the maximum observed frame gap from 3.7 s to 0.9 s. The eight-second CI
+capture timeout was not reproduced locally, so the precise cause remains inferred.
+The test helper now yields one animation frame after every public Step click; no
+model work, rendering, assertions, timeouts or retries are skipped or changed. All
+ten request journeys and typecheck passed after this harness-only correction.
+Full repository CI 42415780219 passed on the unchanged application source. A new
+fresh exact-head review and browser CI are required before merge.
