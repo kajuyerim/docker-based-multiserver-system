@@ -16,7 +16,7 @@ const digest = (path: string): string => {
 export default defineConfig({
   testDir: './browser',
   timeout: 60_000,
-  globalTimeout: 300_000,
+  globalTimeout: 600_000,
   expect: { timeout: 8_000 },
   fullyParallel: true,
   workers: 1,

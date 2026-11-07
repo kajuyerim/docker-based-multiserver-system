@@ -22,8 +22,8 @@ const slider = (id: string, label: string, value: number, min: number, max: numb
 
 $('app').innerHTML = `
 <div class="simulation-shell">
-  <div id="campus" role="img" aria-label="Live isometric multiserver simulation. Use the Inspect component control for equivalent keyboard access."></div>
-  <header class="instrument-bar">
+  <div id="campus" role="group" aria-label="Live multiserver map. Select a component label or use Inspect component."></div>
+  <header class="instrument-bar" data-scene-overlay>
     <div class="identity"><span class="live-dot" aria-hidden="true"></span><h1>MULTISERVER</h1><span class="rule"></span><span id="sim-time">0.00 s</span><span id="playback-state" class="sr-only">Running</span></div>
     <section class="vitals" aria-label="Live metrics">
       <div class="vital"><span>SUCCESS /s</span><strong id="throughput">0</strong><small>offered <b id="offered">0</b></small></div>
@@ -35,27 +35,28 @@ $('app').innerHTML = `
     </section>
     <div class="utility-row"><span class="model-disclosure">EDUCATIONAL MODEL <span>· synthetic capacity · 5 s metrics</span></span><div><button id="intro">Guide</button><button id="show-comparison" aria-expanded="false" aria-controls="comparison-panel">Compare</button><button id="show-diagnostics" aria-expanded="false" aria-controls="diagnostics">Console</button><button id="show-inspector" aria-expanded="false" aria-controls="inspector-panel">Inspector</button></div></div>
   </header>
-  <aside class="traffic-panel overlay" aria-label="Traffic controls">
+  <aside class="traffic-panel overlay" aria-label="Traffic controls" data-scene-overlay>
     <div class="panel-heading"><h2>WORKLOAD</h2><span>seed <b id="seed-label">476</b></span></div>
     ${slider('rate', 'Requests /s', 30, 0, 500, '')}
     ${slider('slow', 'Slow requests', 0, 0, 100, '%')}
-    <details><summary>Workload settings</summary>${slider('slow-seconds', 'Sleep duration', 2, 0, 10, ' s', 0.5)}${slider('jitter', 'Arrival jitter', 15, 0, 50, '%')}
+    <details id="workload-settings"><summary>Workload settings</summary><button id="close-workload">Return to map</button>${slider('slow-seconds', 'Sleep duration', 2, 0, 10, ' s', 0.5)}${slider('jitter', 'Arrival jitter', 15, 0, 50, '%')}
       <label for="seed" class="small">Workload seed</label><div class="button-row"><input id="seed" type="number" min="1" max="4294967295" value="476"><button id="new-seed">Apply seed</button></div>
       <label class="checkbox"><input type="checkbox" id="reduced-motion">Reduce motion</label><p class="small muted">Slow requests sleep without CPU or Redis work. The real per-client rate limiter is omitted in this capacity sandbox.</p>
     </details>
     <div class="inspect-picker"><label for="inspect-component">Inspect component</label><select id="inspect-component"><option value="">Select a component…</option></select></div>
+    <p id="label-help" class="small muted">Select a building or its label to inspect.</p>
+    <p id="feedback" class="feedback" role="status" aria-live="polite">Ready. Change the workload or select a component.</p>
   </aside>
-  <aside id="inspector-panel" class="inspector overlay" aria-label="Component inspector" hidden><div class="panel-heading"><h2>INSPECTOR</h2><button id="close-inspector" aria-label="Close inspector">×</button></div><nav id="component-nav" class="component-nav" aria-label="Inspect a component"></nav><div id="inspector-body"></div></aside>
-  <div class="scene-caption"><span>NGINX / GO / REDIS</span><p>Click a component to inspect its state.</p></div>
-  <div class="scene-legend" aria-label="Scene legend"><span><i style="background:#287f83"></i>Active</span><span><i style="background:#b88029"></i>Queueing</span><span><i style="background:#7763a3"></i>Draining</span><span><i style="background:#a64a42"></i>Stopped</span><span>≤200 sampled flow markers</span><span id="render-rate"></span></div>
-  <section id="experiment-panel" class="experiment-panel overlay" aria-label="Guided experiment" hidden><div><h2 id="experiment-title"></h2><p id="experiment-setup"></p><p id="experiment-goal"></p><p id="experiment-evidence"></p></div><div class="experiment-actions"><button id="experiment-action"></button><button id="experiment-reset">Reset experiment</button><button id="experiment-exit">Free running</button></div></section>
-  <p id="feedback" class="feedback" role="status" aria-live="polite">Ready. Change the workload or select a component.</p>
-  <footer class="transport-bar" aria-label="Playback">
+  <aside id="inspector-panel" class="inspector overlay" aria-label="Component inspector" data-scene-overlay hidden><div class="panel-heading"><h2>INSPECTOR</h2><button data-reading aria-expanded="false">Read details</button><button id="close-inspector" aria-label="Close inspector">×</button></div><nav id="component-nav" class="component-nav" aria-label="Inspect a component"></nav><div id="inspector-body"></div></aside>
+
+  <div class="scene-legend" aria-label="Scene legend" data-scene-overlay><span><i style="background:#287f83"></i>Active</span><span><i style="background:#b88029"></i>Queueing</span><span><i style="background:#7763a3"></i>Draining</span><span><i style="background:#a64a42"></i>Stopped</span><span>≤200 sampled flow markers</span><span id="render-rate"></span></div>
+  <section id="experiment-panel" class="experiment-panel overlay" aria-label="Guided experiment" data-scene-overlay hidden><div><div class="panel-heading"><h2 id="experiment-title"></h2><button data-reading aria-expanded="false">Read details</button><button id="collapse-experiment" aria-label="Collapse experiment">×</button></div><p id="experiment-setup"></p><p id="experiment-goal"></p><p id="experiment-evidence"></p></div><div class="experiment-actions"><button id="experiment-action"></button><button id="experiment-reset">Reset experiment</button><button id="experiment-exit">Free running</button></div></section>
+  <footer class="transport-bar" aria-label="Playback" data-scene-overlay>
     <div class="transport-controls"><button id="pause">Ⅱ Pause</button><button id="step">Step</button><label class="sr-only" for="speed">Playback speed</label><select id="speed"><option value="0.25">0.25×</option><option value="0.5">0.5×</option><option value="1" selected>1×</option><option value="2">2×</option><option value="4">4×</option></select><button id="reset">↻ Reset</button><button id="fresh-settings">Run current settings</button></div>
-    <div class="transport-context"><label for="scenario">EXPERIMENT</label><select id="scenario"><option value="">Free running</option>${SCENARIOS.map(s => `<option value="${s.id}">${s.title}</option>`).join('')}</select><span id="metric-window">5 s rolling window</span></div><a href="${import.meta.env.BASE_URL}model.txt" target="_blank" rel="noreferrer">Model ${MODEL_VERSION} ↗</a>
+    <div class="transport-context"><label for="scenario">EXPERIMENT</label><select id="scenario"><option value="">Free running</option>${SCENARIOS.map(s => `<option value="${s.id}">${s.title}</option>`).join('')}</select><button id="show-experiment" aria-controls="experiment-panel" aria-expanded="false" hidden>Details</button><span id="metric-window">5 s rolling window</span></div><a href="${import.meta.env.BASE_URL}model.txt" target="_blank" rel="noreferrer">Model ${MODEL_VERSION} ↗</a>
   </footer>
-  <section id="comparison-panel" class="comparison-panel overlay" aria-label="Baseline comparison" hidden></section>
-  <section id="diagnostics" class="diagnostics overlay" aria-label="Simulation console" hidden><div class="panel-heading"><h2>CONSOLE</h2><button id="close-diagnostics" aria-label="Close console">×</button></div><div class="console-grid">
+  <section id="comparison-panel" class="comparison-panel overlay" aria-label="Baseline comparison" data-scene-overlay hidden></section>
+  <section id="diagnostics" class="diagnostics overlay" aria-label="Simulation console" data-scene-overlay hidden><div class="panel-heading"><h2>CONSOLE</h2><button data-reading aria-expanded="false">Read details</button><button id="close-diagnostics" aria-label="Close console">×</button></div><div class="console-grid">
     <section><div class="card-header"><h2>Throughput</h2><span class="small muted">60 simulated seconds</span></div><svg id="chart" class="chart" viewBox="0 0 600 135" role="img" aria-label="Recent offered and successful throughput; current values appear in the top instruments."></svg><div class="chart-caption">— Offered &nbsp; — Successful</div></section>
     <section><div class="card-header"><h2>Request trace</h2><button id="latest-trace">Latest</button></div><div class="button-row"><label for="trace-id">Request</label><input id="trace-id" type="number" min="1" step="1" value="1"><button id="inspect-trace">Inspect</button><span id="trace-result" class="muted">Waiting for traffic</span></div><ol id="trace-list" class="trace-list"></ol></section>
   </div><details class="text-summary" open><summary>System summary & counters</summary><p id="summary"></p><div class="scroll-table"><table><caption class="sr-only">Replica state and request distribution</caption><thead><tr><th>Replica</th><th>State</th><th>CPU queue</th><th>Sleeping</th><th>Redis wait</th><th>Attempts</th><th>Local count</th></tr></thead><tbody id="replica-table"></tbody></table></div></details></section>
@@ -65,6 +66,7 @@ $('app').innerHTML = `
 
 let experiment: Experiment | undefined;
 let announcedCompletion = false;
+let displayedExperiment: Experiment | undefined;
 let engine = new Engine();
 let initial: Config = { ...DEFAULT_CONFIG };
 let initialCommands: Command[] = [];
@@ -183,8 +185,12 @@ function updateTrace(): void {
 }
 
 function updateExperiment(): void {
-  $('experiment-panel').hidden = !experiment;
-  document.body.classList.toggle('in-experiment', !!experiment);
+  if (displayedExperiment !== experiment) {
+    $('experiment-panel').hidden = !experiment; displayedExperiment = experiment;
+    $('show-experiment').setAttribute('aria-expanded', String(!!experiment));
+  }
+  if ($('show-experiment').hidden !== !experiment) $('show-experiment').hidden = !experiment;
+  document.body.classList.toggle('in-experiment', !!experiment && !$('experiment-panel').hidden);
   if (!experiment) return;
   const progress = experiment.observe(snapshot, metrics);
   $('experiment-title').textContent = `${experiment.definition.title}${progress.complete ? ' · Verified' : ''}`;
@@ -291,6 +297,7 @@ $('app').addEventListener('click', event => {
   }
   switch (target.id) {
     case 'pause': clock.paused ? clock.resume() : clock.pause(); snapshot = engine.snapshot(); metrics = history.observe(snapshot); update(); break;
+    case 'close-workload': $<HTMLDetailsElement>('workload-settings').open = false; $('workload-settings').querySelector('summary')!.focus(); break;
     case 'step': clock.step(); snapshot = engine.snapshot(); metrics = history.observe(snapshot); update(); break;
     case 'reset': if (experiment) startExperiment(experiment.definition.id); else reset(); break;
     case 'experiment-action': if (experiment) for (const command of experiment.actions(snapshot)) issue(command); break;
@@ -298,6 +305,8 @@ $('app').addEventListener('click', event => {
     case 'experiment-exit': experiment = undefined; $<HTMLSelectElement>('scenario').value = ''; update(); break;
     case 'run-settings': case 'fresh-settings': runWithSettings(); break;
     case 'show-comparison': comparison.toggle(); break;
+    case 'show-experiment': $('experiment-panel').hidden = !$('experiment-panel').hidden; target.setAttribute('aria-expanded', String(!$('experiment-panel').hidden)); break;
+    case 'collapse-experiment': $('experiment-panel').hidden = true; $('show-experiment').setAttribute('aria-expanded', 'false'); $('show-experiment').focus(); break;
     case 'show-inspector': $('inspector-panel').hidden = !$('inspector-panel').hidden; target.setAttribute('aria-expanded', String(!$('inspector-panel').hidden)); break;
     case 'close-inspector': $('inspector-panel').hidden = true; $('show-inspector').setAttribute('aria-expanded', 'false'); $('show-inspector').focus(); break;
     case 'show-diagnostics': $('diagnostics').hidden = !$('diagnostics').hidden; target.setAttribute('aria-expanded', String(!$('diagnostics').hidden)); break;

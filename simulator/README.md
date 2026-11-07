@@ -52,7 +52,7 @@ The ready signal requires renderer initialization and the first scene/UI update;
 an early control or loading shell is insufficient. Tests delay the renderer module
 and inject representative focus/occlusion and missing-asset faults to check these guards. Browser
 exceptions, console errors and failed assets fail the run. Tests use seed 476,
-bounded state-based waits and zero retries, with a five-minute overall limit.
+bounded state-based waits and zero retries, with a ten-minute overall limit.
 Chromium uses one worker and explicit SwiftShader software WebGL, including locally,
 to avoid competing GPU contexts on hosted runners. Traces retain DOM/action snapshots;
 screenshots are captured at matrix checkpoints and on failure, rather than for every
@@ -66,9 +66,11 @@ The workflow uploads these reports and viewport screenshots for 14 days and gate
 Pages deployment on the browser job as well as model tests/build.
 
 Keep manual visual review for art quality, scene readability and device performance.
-The baseline panel screenshots expose the existing scene-occlusion problem tracked
-in #45; its geometry checks build on this suite. A passing controls test does not
-claim that every canvas label is unobscured.
+Geometry journeys also check each selected component label against the measured
+unobscured scene, panel switching, reading-view return, orientation changes, and
+unchanged model time/counters. Phone/tablet exploration keeps half the viewport for
+the scene. Labels stay at least 12 px; use Inspect component for any omitted label.
+Screenshots still need visual inspection for meaningful building/path readability.
 
 ## GitHub Pages
 

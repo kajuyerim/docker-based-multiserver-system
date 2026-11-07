@@ -1,9 +1,12 @@
-import { Application, Container, Graphics, Text } from 'pixi.js';
+import { Application, Container, Graphics } from 'pixi.js';
 import type { BackendSnapshot, SemanticEvent, Snapshot } from '../model/types';
+import { fitScene, placeLabel } from './layout';
+import type { Rect } from './layout';
+import { SceneLayout } from '../ui/scene-layout';
 
 export type ComponentId = 'clients' | 'nginx' | 'redis' | `app${number}`;
 type Point = { x: number; y: number };
-const colors = { ink: 0x253744, muted: 0x485b65, green: 0x287f83, blue: 0x7763a3,
+const colors = { ink: 0x253744, green: 0x287f83, blue: 0x7763a3,
   amber: 0xb88029, red: 0xa64a42, idle: 0x738b96 };
 
 export function backendState(b: BackendSnapshot): string {
@@ -12,12 +15,13 @@ export function backendState(b: BackendSnapshot): string {
   return b.inFlight ? 'Busy' : 'Idle';
 }
 
-interface Building { container: Container; shape: Graphics; caption: Container; plate: Graphics; label: Text; status: Text; point: Point; color: number }
+interface Building { container: Container; shape: Graphics; label: HTMLButtonElement; status: string; point: Point; color: number }
 
 export class Campus {
   private app = new Application();
   private world = new Container();
   private roads = new Graphics();
+  private leaders = new Graphics();
   private buildings = new Map<ComponentId, Building>();
   private markers: Graphics[] = [];
   private selection = new Graphics();
@@ -25,15 +29,19 @@ export class Campus {
   private ready = false;
   private reduced = false;
   private topology = '';
-  private observer?: ResizeObserver;
+  private layout?: SceneLayout;
+  private host?: HTMLElement;
+  private area: Rect = { x: 0, y: 0, width: 1, height: 1 };
+  private selected: ComponentId = 'nginx';
 
   async mount(host: HTMLElement, onSelect: (id: ComponentId) => void, onRequest: (id: number) => void): Promise<void> {
+    this.host = host;
     await this.app.init({ backgroundAlpha: 0, antialias: true, resolution: Math.min(devicePixelRatio, 2), autoDensity: true,
       autoStart: false, preference: 'webgl', width: host.clientWidth, height: host.clientHeight });
     host.append(this.app.canvas);
     this.app.canvas.setAttribute('aria-hidden', 'true');
     this.world.sortableChildren = true;
-    this.app.stage.addChild(this.world);
+    this.app.stage.addChild(this.world, this.leaders);
     const ground = new Graphics();
     ground.poly([-350, 270, 620, -210, 1570, 270, 590, 770]).fill(0xaebdc2);
     for (let x = -800; x < 1900; x += 55) {
@@ -49,20 +57,17 @@ export class Campus {
       container.zIndex = 2;
       container.position.set(point.x, point.y);
       const shape = new Graphics();
-      const caption = new Container();
-      const plate = new Graphics();
-      const title = new Text({ text: label, style: { fontFamily: 'system-ui', fontSize: 11, fontWeight: '600', fill: colors.ink } });
-      title.anchor.set(0.5); title.y = -8;
-      const status = new Text({ text: '', style: { fontFamily: 'system-ui', fontSize: 9, fill: colors.muted, align: 'center' } });
-      status.anchor.set(0.5); status.y = 7;
-      caption.addChild(plate, title, status);
-      caption.y = id === 'clients' ? 91 : -108;
-      caption.scale.set(1 / this.world.scale.x);
-      container.addChild(shape, caption);
+      const caption = document.createElement('button');
+      caption.className = 'component-label';
+      caption.dataset.sceneComponent = id;
+      caption.innerHTML = `<strong>${label}</strong><span></span>`;
+      caption.addEventListener('click', () => onSelect(id));
+      host.append(caption);
+      container.addChild(shape);
       container.eventMode = 'static'; container.cursor = 'pointer';
       container.on('pointertap', () => onSelect(id));
       this.world.addChild(container);
-      this.buildings.set(id, { container, shape, caption, plate, label: title, status, point, color: -1 });
+      this.buildings.set(id, { container, shape, label: caption, status: '', point, color: -1 });
     };
     this.add = add;
     add('clients', 'Clients', { x: 120, y: 330 });
@@ -75,19 +80,15 @@ export class Campus {
       marker.on('pointertap', () => { if (marker.label) onRequest(Number(marker.label)); });
       this.markers.push(marker); this.world.addChild(marker);
     }
-    this.observer = new ResizeObserver(() => {
-      const width = host.clientWidth, height = host.clientHeight;
-      this.app.renderer.resize(width, height);
-      const left = width > 760 ? 230 : 25;
-      const top = width > 760 ? 150 : 280;
-      const usableHeight = Math.max(280, height - top - 100);
-      const scale = Math.min((width - left - 20) / 1180, usableHeight / 620);
-      this.world.scale.set(scale);
-      for (const building of this.buildings.values()) building.caption.scale.set(1 / scale);
-      this.world.position.set(left + (width - left - 20 - 1180 * scale) / 2, top + (usableHeight - 620 * scale) / 2);
-      this.render();
+    await new Promise<void>(resolve => {
+      this.layout = new SceneLayout(host, area => {
+        this.area = area;
+        this.app.renderer.resize(host.clientWidth, host.clientHeight);
+        this.fit();
+        this.render();
+        resolve();
+      });
     });
-    this.observer.observe(host);
     this.ready = true;
   }
 
@@ -95,11 +96,11 @@ export class Campus {
 
   update(snapshot: Snapshot, selected: ComponentId, reduced: boolean): void {
     if (!this.ready) return;
-    this.snapshot = snapshot; this.reduced = reduced;
+    this.snapshot = snapshot; this.reduced = reduced; this.selected = selected;
     const topology = snapshot.backends.map(b => b.id).join(',');
     if (topology !== this.topology) {
       this.topology = topology;
-      for (const [id, b] of this.buildings) if (id.startsWith('app')) { b.container.destroy({ children: true }); this.buildings.delete(id); }
+      for (const [id, b] of this.buildings) if (id.startsWith('app')) { b.container.destroy({ children: true }); b.label.remove(); this.buildings.delete(id); }
       const count = snapshot.backends.length;
       snapshot.backends.forEach((b, i) => {
         const columns = count > 4 ? 2 : 1;
@@ -116,6 +117,7 @@ export class Campus {
       path(this.point('clients'), this.point('nginx'));
       for (const b of snapshot.backends) { path(this.point('nginx'), this.point(`app${b.id}`)); path(this.point(`app${b.id}`), this.point('redis')); }
       for (const marker of this.markers) this.world.addChild(marker);
+      this.fit();
     }
     this.paint('clients', colors.blue, `${snapshot.config.rate} offered /s`);
     this.paint('nginx', colors.green, snapshot.config.retry ? 'Retries enabled' : 'Retries disabled');
@@ -124,10 +126,11 @@ export class Campus {
     for (const b of snapshot.backends) {
       const state = backendState(b);
       const color = state === 'Stopped' ? colors.red : state === 'Saturated' ? colors.amber : state === 'Draining' || state === 'Starting' ? colors.blue : state === 'Idle' ? colors.idle : colors.green;
-      this.paint(`app${b.id}`, color, this.world.scale.x < 0.4 ? state : `${state} · ${b.inFlight} in flight`);
+      this.paint(`app${b.id}`, color, `${state} · ${b.inFlight} in flight`);
     }
     const point = this.point(selected);
     this.selection.clear().ellipse(point.x, point.y + 12, 78, 43).stroke({ color: 0xe5f3ec, width: 2, alpha: 0.9 });
+    this.labels();
   }
 
   render(displayTime = this.snapshot?.now ?? 0): void {
@@ -149,7 +152,70 @@ export class Campus {
     this.app.render();
   }
 
-  destroy(): void { this.observer?.disconnect(); this.app.destroy(true, { children: true }); }
+  destroy(): void {
+    this.layout?.destroy();
+    for (const b of this.buildings.values()) b.label.remove();
+    this.app.destroy(true, { children: true });
+  }
+
+  private fit(): void {
+    const points = [...this.buildings.values()].map(b => b.point);
+    if (!points.length) return;
+    const x = Math.min(...points.map(p => p.x)) - 90, y = Math.min(...points.map(p => p.y)) - 100;
+    const bounds = { x, y, width: Math.max(...points.map(p => p.x)) + 125 - x,
+      height: Math.max(...points.map(p => p.y)) + 90 - y };
+    const transform = fitScene(bounds, this.area, 30);
+    this.world.scale.set(transform.scale);
+    this.world.position.set(transform.x, transform.y);
+    this.labels();
+  }
+
+  private labels(): void {
+    const area = this.area;
+    const needsAttention = (b: Building) => [colors.red, colors.amber].includes(b.color) || b.status.startsWith('Draining');
+    const ordered = [...this.buildings.entries()].sort(([a, x], [b, y]) =>
+      Number(b === this.selected) - Number(a === this.selected) ||
+      Number(needsAttention(y)) - Number(needsAttention(x)));
+    this.leaders.clear();
+    const selectedPoint = this.point(this.selected), scale = this.world.scale.x;
+    const occupied: Rect[] = [{ x: this.world.x + (selectedPoint.x - 85) * scale,
+      y: this.world.y + (selectedPoint.y - 85) * scale, width: 170 * scale, height: 140 * scale }];
+    let used = 0, collapsed = 0;
+    for (const [id, building] of ordered) {
+      const isSelected = id === this.selected;
+      const attention = needsAttention(building);
+      const label = building.label;
+      label.hidden = false;
+      label.setAttribute('aria-pressed', String(isSelected));
+      label.classList.toggle('detailed', isSelected || attention);
+      label.querySelector('span')!.textContent = building.status;
+      label.setAttribute('aria-label', `${id === 'clients' ? 'Clients' : id === 'nginx' ? 'NGINX' : id === 'redis' ? 'Redis' : id}: ${building.status}. Inspect component`);
+      const anchor = { x: this.world.x + (building.point.x - 85) * scale,
+        y: this.world.y + (building.point.y - 85) * scale, width: 170 * scale, height: 140 * scale };
+      const size = { width: label.offsetWidth, height: label.offsetHeight };
+      const placement = placeLabel(anchor, size, area, occupied, isSelected || attention);
+      const budget = area.width * area.height * 0.22;
+      if (!placement || (!isSelected && !attention && used + size.width * size.height > budget)) {
+        label.hidden = true; collapsed++; continue;
+      }
+      label.style.left = `${placement.x}px`; label.style.top = `${placement.y}px`;
+      const center = { x: this.world.x + building.point.x * scale, y: this.world.y + (building.point.y - 35) * scale };
+      const edge = { x: Math.max(placement.x, Math.min(placement.x + placement.width, center.x)),
+        y: Math.max(placement.y, Math.min(placement.y + placement.height, center.y)) };
+      if (Math.hypot(center.x - edge.x, center.y - edge.y) > 48) {
+        this.leaders.moveTo(center.x, center.y).lineTo(edge.x, edge.y).stroke({ color: colors.ink, width: 1, alpha: .65 });
+      }
+      occupied.push(placement); used += size.width * size.height;
+    }
+    if (this.host) {
+      this.host.style.setProperty('--scene-x', `${area.x}px`);
+      this.host.style.setProperty('--scene-y', `${area.y}px`);
+      this.host.style.setProperty('--scene-width', `${area.width}px`);
+      this.host.style.setProperty('--scene-height', `${area.height}px`);
+      const help = document.getElementById('label-help');
+      if (help) help.textContent = collapsed ? `${collapsed} labels hidden. Inspect any component using the selector.` : 'Select a building or its label to inspect.';
+    }
+  }
   private point(id: ComponentId): Point { return this.buildings.get(id)?.point ?? { x: 660, y: 300 }; }
   private segment(e: SemanticEvent): [Point, Point] | undefined {
     const backend = this.point(`app${e.backend ?? 1}`);
@@ -168,14 +234,8 @@ export class Campus {
   }
   private paint(id: ComponentId, color: number, status: string): void {
     const b = this.buildings.get(id)!;
-    const compact = this.world.scale.x < 0.4;
-    b.label.style.fontSize = compact ? 9 : 11;
-    b.status.style.fontSize = compact ? 8 : 9;
-    b.status.text = status;
-    const width = Math.max(b.label.width, b.status.width) + (compact ? 12 : 16), height = compact ? 32 : 38;
-    b.plate.clear().rect(-width / 2, -height / 2, width, height).fill({ color: 0xf5f5ef, alpha: 0.97 })
-      .stroke({ width: 1, color: 0x6f858e, alpha: .35 });
-    b.plate.rect(-width / 2, -height / 2, 3, height).fill(color);
+    b.status = status;
+    b.label.style.borderLeftColor = `#${color.toString(16).padStart(6, '0')}`;
     if (b.color === color) return;
     b.color = color;
     const g = b.shape.clear();

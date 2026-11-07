@@ -71,7 +71,33 @@ Comparison uses every terminal latency sample in the observation window, the exa
 
 PixiJS consumes frozen snapshots and never advances the model. Movement is illustrative: up to 200 pooled markers represent sampled semantic events, stretched to a 400 ms visual journey. Their positions and counts are not latency or throughput measurements. The request console records actual simulated timestamps and attempt/operation identities, including detached Redis commits. Canvas selection has an equivalent native component selector and buttons. State names, queue counts, and the text summary supplement colors. Reduced motion removes moving markers while preserving the model and controls.
 
-The view fills the viewport. Desktop controls surround the scene; narrow layouts put traffic controls above it, with scrollable metric and inspector regions. The optional console exposes topology, failures, replica distribution, counters, and traces without relying on canvas interpretation. Hiding the tab pauses the model. Reset clears queues/counters and recreates the run's initial recipe; Run current settings starts a fresh run from the applied controls. A saved comparison baseline survives either reset until explicitly cleared or the page reloads.
+The view fills the viewport. A shared DOM layout measures the header, workload,
+playback and active panel rectangles, then fits the actual component/path bounds
+into an unobscured scene rectangle. Opening a secondary panel collapses the previous
+one; it does not change the selected component or its controls. The experiment can
+be collapsed and reopened through Details without restarting it. Resizing and
+opening panels never advance or reset the model.
+
+Component labels are native buttons with a 12 CSS-pixel minimum for names and
+state text. Selection has first priority, followed by stopped/queueing/draining
+components; other labels show names and use a 22% scene-area budget. Priority labels
+can relocate into nearby free space, with connector lines for distant placement.
+The selected building's footprint is reserved against all label placement.
+Secondary labels that cannot be placed without overlap are omitted rather than shrunk, and every
+component remains available through Inspect component. Selected labels include
+state and queue/in-flight details. The label layout measures actual text boxes.
+
+At widths up to 1024 px, one compact panel leaves at least half the viewport area
+available for ordinary phone/tablet exploration, including short landscape screens
+with a side column. Desktop Console/Compare use a bounded bottom sheet. Read details opens an explicit
+reading view with Return to map; expanded workload settings similarly provide a
+Return to map action. Escape also leaves an expanded reading view. Inner scrolling
+keeps controls reachable; opening or closing reading views preserves playback and
+settings. The optional console exposes topology, failures, replica distribution,
+counters and traces without relying on canvas interpretation. Hiding the tab pauses
+the model. Reset clears queues/counters and recreates the run's initial recipe;
+Run current settings starts a fresh run from applied controls. A saved comparison
+baseline survives either reset until explicitly cleared or the page reloads.
 
 All buildings, paths, and markers are original procedural geometry. System fonts require no remote font request. PGSimCity informed the scene-first layout and contextual inspection approach; no game assets, branding, or source were copied. The build includes dependency licenses in `notices.txt`.
 

@@ -111,3 +111,44 @@ retain the same assertions and zero retries. The updated 19-test local Chromium 
 passed in 45.1 s; updated WebKit link/control checks passed 2/2. Hosted CI and review
 are being rerun. An existing x/net scanner finding is addressed in a separate
 prerequisite PR rather than suppressed here.
+
+## S1 / #45 — panel-aware scene and readable labels (7 November 2026)
+
+The scene now fits component/path bounds into space measured from the actual DOM
+panels. One secondary sheet is active at a time. Compact phone/tablet sheets leave
+at least half the viewport for exploration; explicit Read details / Return to map
+views provide room for longer controls. Workload settings and Escape also have a
+return path. Desktop Console/Compare no longer consume almost the entire scene.
+Collapsed experiments stay collapsed while running, and panel changes preserve
+selection and expanded inspector disclosures. Action feedback remains visible in
+the workload panel and all metrics are reachable by horizontal scrolling.
+
+Labels use native 12 px buttons, selected/attention priority, a 22% secondary-label
+budget, measured placement, and the selected building's reserved footprint. Priority
+labels can relocate with connector lines; all eight stopped-backend labels remain
+available on a phone. The component selector provides access to omitted secondary
+labels. Scene readiness now waits for its first measured layout.
+
+Local validation: 64 model/geometry tests passed (one opt-in benchmark skipped),
+typecheck/production build passed, and the complete 31-test Chromium suite passed
+without retries. After the final label-footprint/metric/feedback adjustments, all
+13 affected geometry/lifecycle/smoke checks passed in 27.5 s and WebKit desktop/phone
+smoke passed 2/2. The matrix selects every component with 1/3/8 replicas at 390×844,
+768×1024 and 1280×720, switches panels, rotates/resizes, and verifies half-area compact
+framing, visibility, minimum label size, focus and unchanged paused time/counters.
+
+Inspected the nine viewport/replica Redis-inspector screenshots and matched earlier
+desktop/tablet/phone layout states: Redis and its connections are now beside the
+panels. The eight-stopped-backend screenshot was also inspected. These are emulated
+viewports, not physical-device performance claims. Reports retain source/bundle/lock
+hashes; local evidence is in /tmp/s1-45-verified-chromium and /tmp/s1-45-final-layout.
+CI and a fresh independent PR review remain required before merge. No model engine,
+Go handler, proxy, container or deployment semantics changed; pitfall review passed.
+
+Independent review of head 3f526013 repeated the full 31-test Chromium suite and
+WebKit 2/2 successfully. Hosted run 42409039541 reached the old 300 s suite deadline
+after 22 passes, with nine checks unstarted and no assertion failures. The verified
+artifact hashes match that source. The expanded suite now has a 600 s overall bound
+and a 15-minute job bound for setup/artifact overhead. Individual test/action/assertion
+timeouts, one worker, assertions and zero retries are unchanged. A complete fresh
+hosted pass and review of the updated head remain required before merge.

@@ -51,6 +51,7 @@ for (const viewport of [{ width: 390, height: 844 }, { width: 768, height: 1024 
       await pause(page);
       await expect(page.locator('#inspect-component option')).toHaveCount(replicas + 4);
       if (replicas !== 3) {
+        if (viewport.width <= 1024) await page.locator('#experiment-panel [data-reading]').click();
         await actionable(page.locator('#experiment-exit'));
         await page.locator('#experiment-exit').click();
       }
