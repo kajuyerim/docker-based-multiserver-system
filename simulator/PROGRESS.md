@@ -144,3 +144,11 @@ viewports, not physical-device performance claims. Reports retain source/bundle/
 hashes; local evidence is in /tmp/s1-45-verified-chromium and /tmp/s1-45-final-layout.
 CI and a fresh independent PR review remain required before merge. No model engine,
 Go handler, proxy, container or deployment semantics changed; pitfall review passed.
+
+Independent review of head 3f526013 repeated the full 31-test Chromium suite and
+WebKit 2/2 successfully. Hosted run 42409039541 reached the old 300 s suite deadline
+after 22 passes, with nine checks unstarted and no assertion failures. The verified
+artifact hashes match that source. The expanded suite now has a 600 s overall bound
+and a 15-minute job bound for setup/artifact overhead. Individual test/action/assertion
+timeouts, one worker, assertions and zero retries are unchanged. A complete fresh
+hosted pass and review of the updated head remain required before merge.

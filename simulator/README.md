@@ -52,7 +52,7 @@ The ready signal requires renderer initialization and the first scene/UI update;
 an early control or loading shell is insufficient. Tests delay the renderer module
 and inject representative focus/occlusion and missing-asset faults to check these guards. Browser
 exceptions, console errors and failed assets fail the run. Tests use seed 476,
-bounded state-based waits and zero retries, with a five-minute overall limit.
+bounded state-based waits and zero retries, with a ten-minute overall limit.
 Chromium uses one worker and explicit SwiftShader software WebGL, including locally,
 to avoid competing GPU contexts on hosted runners. Traces retain DOM/action snapshots;
 screenshots are captured at matrix checkpoints and on failure, rather than for every
