@@ -15,11 +15,11 @@ const digest = (path: string): string => {
 
 export default defineConfig({
   testDir: './browser',
-  timeout: 45_000,
+  timeout: 60_000,
   globalTimeout: 300_000,
   expect: { timeout: 8_000 },
   fullyParallel: true,
-  workers: 2,
+  workers: 1,
   retries: 0,
   forbidOnly: true,
   reporter: [['list'], ['html', { open: 'never' }], ['json', { outputFile: 'test-results/results.json' }]],
@@ -35,10 +35,12 @@ export default defineConfig({
     actionTimeout: 8_000,
     navigationTimeout: 15_000,
     screenshot: 'only-on-failure',
-    trace: 'retain-on-failure',
+    trace: { mode: 'retain-on-failure', screenshots: false },
   },
   projects: [
-    { name: 'chromium', use: { browserName: 'chromium' } },
+    { name: 'chromium', use: { browserName: 'chromium', launchOptions: {
+      args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
+    } } },
     { name: 'webkit-desktop', testMatch: 'smoke.spec.ts', use: { browserName: 'webkit' } },
     { name: 'webkit-phone', testMatch: 'smoke.spec.ts', use: {
       browserName: 'webkit', viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true,

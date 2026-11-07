@@ -53,6 +53,11 @@ an early control or loading shell is insufficient. Tests delay the renderer modu
 and inject representative focus/occlusion and missing-asset faults to check these guards. Browser
 exceptions, console errors and failed assets fail the run. Tests use seed 476,
 bounded state-based waits and zero retries, with a five-minute overall limit.
+Chromium uses one worker and explicit SwiftShader software WebGL, including locally,
+to avoid competing GPU contexts on hosted runners. Traces retain DOM/action snapshots;
+screenshots are captured at matrix checkpoints and on failure, rather than for every
+traced frame. The comparison allows up to 40 seconds per observed run on software
+renderers, without changing model time or its completion conditions.
 
 Failures retain a Playwright trace, screenshot, browser errors and UI/focus state.
 The JSON/HTML reports identify the source revision, source-tree hash, built-bundle

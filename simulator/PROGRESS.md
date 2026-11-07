@@ -101,3 +101,13 @@ WebKit phone input/viewport and tab visibility are emulated, not physical-device
 manual tab-switch evidence. Failure artifacts include runtime errors, focus/UI
 state, trace, screenshot, revision and source/bundle/lock hashes. PR CI and fresh
 independent review are required before merge.
+
+Fresh review found and corrected two weak assertions: the smoke test now opens
+the rendered documentation links, and unchanged comparison requires all 13 matching
+measurement rows with zero deltas and no error result. The first hosted run exposed
+software-rendering contention and bounded waits expiring during continued progress.
+One-worker explicit SwiftShader and action/DOM traces without per-frame screenshots
+retain the same assertions and zero retries. The updated 19-test local Chromium run
+passed in 45.1 s; updated WebKit link/control checks passed 2/2. Hosted CI and review
+are being rerun. An existing x/net scanner finding is addressed in a separate
+prerequisite PR rather than suppressed here.

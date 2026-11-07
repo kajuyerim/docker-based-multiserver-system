@@ -15,18 +15,28 @@ for (const id of ['scaling', 'outage', 'drain', 'redis']) {
 }
 
 test('baseline and candidate compare the same observed window', async ({ page }) => {
+  test.setTimeout(100_000);
   await open(page);
   await page.locator('#reset').click();
   await page.getByLabel('Playback speed').selectOption('4');
   await page.locator('#show-comparison').click();
   await page.getByRole('button', { name: 'Save baseline', exact: true }).click();
   await page.locator('#pause').click();
-  await expect(page.locator('#comparison-status')).toContainText('Baseline saved', { timeout: 20_000 });
+  await expect(page.locator('#comparison-status')).toContainText('Baseline saved', { timeout: 40_000 });
   await page.getByRole('button', { name: 'Prepare candidate', exact: true }).click();
   await expect(page.locator('#sim-time')).toHaveText('0.00 s');
   await expect(page.locator('#playback-state')).toHaveText('Paused');
   await page.locator('#pause').click();
-  await expect(page.locator('#comparison-result')).toContainText('Identical settings and interventions', { timeout: 20_000 });
+  await expect(page.locator('#comparison-result')).toContainText('Identical settings and interventions', { timeout: 40_000 });
+  await expect(page.locator('#comparison-result .comparison-error')).toHaveCount(0);
+  const rows = page.locator('#comparison-result tbody tr');
+  await expect(rows).toHaveCount(13);
+  for (const row of await rows.all()) {
+    const cells = await row.locator('td').allTextContents();
+    expect(cells[1], await row.locator('th').innerText()).toBe(cells[0]);
+    expect(Number.parseFloat(cells[2]!)).toBe(0);
+  }
+  expect(Number.parseFloat(await rows.filter({ hasText: 'Successful throughput' }).locator('td').first().innerText())).toBeGreaterThan(0);
   await expect(page.locator('#playback-state')).toHaveText('Paused');
   await page.getByRole('button', { name: 'Close comparison' }).click();
   await expect(page.locator('#show-comparison')).toBeFocused();
