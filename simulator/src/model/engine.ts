@@ -6,7 +6,7 @@ import type { BackendSnapshot, Command, Completion, Outcome, ProcessState, Recor
 
 interface Request {
   id: number; route: Route; createdAt: number; slowUs: number;
-  tried: number[]; attempt: number; stage: Stage; stageSince: number;
+  tried: number[]; attempt: number; attemptIncarnation?: number; stage: Stage; stageSince: number;
 }
 interface Attempt {
   id: number; request: number; backend: number; incarnation: number;
@@ -21,6 +21,7 @@ interface Backend {
 }
 interface RedisOperation {
   id: number; attempt: number; request: number; kind: 'incr' | 'publish';
+  backend: number; incarnation: number; result?: number;
   state: 'outbound' | 'queued' | 'executing' | 'reply'; events: Set<number>;
   halfRtt: number;
 }
@@ -254,7 +255,7 @@ export class Engine {
     this.workloadHash = Math.imul(this.workloadHash ^ (route === 'slow' ? Math.round(this.config.slowSeconds * SECOND) : 0), 16777619) >>> 0;
     const request: Request = { id, route, createdAt: this.now, slowUs: Math.round(this.config.slowSeconds * SECOND),
       tried: [], attempt: 0, stage: 'routing', stageSince: this.now };
-    this.traces.set(id, { id, route, startedAt: this.now, events: [] });
+    this.traces.set(id, { id, route, startedAt: this.now, events: [], omittedEvents: 0 });
     if (this.traces.size > LIMITS.traces) this.traces.delete(this.traces.keys().next().value!);
     this.emit('arrival', `Request ${id}: GET /${route === 'root' ? '' : 'slow'}`, request);
     if (this.requests.size >= LIMITS.requests) { this.finish(request, 'model_admission_rejected'); return; }
@@ -279,6 +280,7 @@ export class Engine {
       incarnation: target.incarnation, events: new Set(), entered: false };
     this.attempts.set(attempt.id, attempt);
     request.attempt = attempt.id;
+    request.attemptIncarnation = attempt.incarnation;
     this.totals.attempts++;
     target.attempts++;
     this.setStage(request, 'connecting');
@@ -358,7 +360,8 @@ export class Engine {
       return;
     }
     const op: RedisOperation = { id: ++this.nextOperation, attempt: attempt.id, request: r.id,
-      kind, state: 'outbound', events: new Set(), halfRtt: Math.round(this.config.redisRttMs * 500) };
+      kind, backend: attempt.backend, incarnation: attempt.incarnation,
+      state: 'outbound', events: new Set(), halfRtt: Math.round(this.config.redisRttMs * 500) };
     this.operations.set(op.id, op);
     attempt.operation = op.id;
     this.emit('redis-send', `Send ${kind.toUpperCase()}`, r, attempt.backend, op.id);
@@ -390,18 +393,18 @@ export class Engine {
     this.afterOperation(op, Math.round(cost * 1000), () => {
       this.redisBusyUs += this.now - this.redisStart;
       this.redisActive = undefined;
-      if (op.kind === 'incr') this.totals.globalCount++;
+      if (op.kind === 'incr') op.result = ++this.totals.globalCount;
       this.emit('redis-commit', `${op.kind.toUpperCase()} committed${op.kind === 'incr' ? `; global count ${this.totals.globalCount}` : ''}`,
         this.requests.get(op.request), undefined, op.id, op.request);
       op.state = 'reply';
       this.afterOperation(op, op.halfRtt, () => {
         const a = this.attempts.get(op.attempt);
-        this.deleteOperation(op);
         if (a?.operation === op.id) {
           a.operation = undefined;
           this.emit('redis-ack', `${op.kind.toUpperCase()} acknowledged`, this.requests.get(a.request), a.backend, op.id);
+          this.deleteOperation(op);
           this.redisResult(a, op.kind, true);
-        }
+        } else this.deleteOperation(op);
       });
       this.startRedis();
     });
@@ -475,7 +478,7 @@ export class Engine {
       outcome, attempts: r.tried.length, backend });
     const trace = this.traces.get(r.id) ?? (this.pinnedTrace?.id === r.id ? this.pinnedTrace : undefined);
     if (trace) { trace.finishedAt = this.now; trace.outcome = outcome; }
-    this.emit('terminal', `Client result: ${outcome}`, r, backend);
+    this.emit('terminal', `Client result: ${outcome}`, r, backend, undefined, r.id, outcome);
   }
 
   private stop(b: Backend): void {
@@ -538,14 +541,22 @@ export class Engine {
     const event = this.scheduler.schedule(this.now + delay, PRIORITY.service, () => { op.events.delete(event); run(); });
     op.events.add(event);
   }
-  private emit(kind: string, message: string, request?: Request, backend?: number, operation?: number, requestId = request?.id): void {
+  private emit(kind: string, message: string, request?: Request, backend?: number, operation?: number, requestId = request?.id, outcome?: Outcome): void {
     const origin = operation === undefined ? undefined : this.operations.get(operation);
     requestId = origin?.request ?? requestId;
+    backend = origin?.backend ?? backend;
+    const attempt = origin?.attempt ?? (request?.attempt || undefined);
     const event: SemanticEvent = { sequence: ++this.sequence, at: this.now, kind, message,
-      request: requestId, attempt: origin?.attempt ?? (request?.attempt || undefined), backend, operation };
+      request: requestId, attempt, backend, operation, outcome,
+      incarnation: origin?.incarnation ?? request?.attemptIncarnation ??
+        this.backends.find(b => b.id === backend)?.incarnation,
+      redisCommand: origin?.kind, redisResult: origin?.result };
     this.events.push(event);
     if (this.events.length > LIMITS.events) this.events.shift();
     const trace = requestId === undefined ? undefined : this.traces.get(requestId) ?? (this.pinnedTrace?.id === requestId ? this.pinnedTrace : undefined);
-    if (trace && trace.events.length < LIMITS.traceEvents) trace.events.push(event);
+    if (trace) {
+      if (trace.events.length < LIMITS.traceEvents) trace.events.push(event);
+      else trace.omittedEvents++;
+    }
   }
 }

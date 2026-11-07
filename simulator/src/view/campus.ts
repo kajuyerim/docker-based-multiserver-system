@@ -6,8 +6,10 @@ import { SceneLayout } from '../ui/scene-layout';
 import { Viewport } from './viewport';
 import type { ViewportState } from './viewport';
 import { MapNavigation } from '../ui/map-navigation';
+import { backgroundEvents, eventLocation, pressure } from './request-view';
+import type { ComponentId, RequestView } from './request-view';
 
-export type ComponentId = 'clients' | 'nginx' | 'redis' | `app${number}`;
+export type { ComponentId } from './request-view';
 type Point = { x: number; y: number };
 const colors = { ink: 0x253744, green: 0x287f83, blue: 0x7763a3,
   amber: 0xb88029, red: 0xa64a42, idle: 0x738b96 };
@@ -28,6 +30,8 @@ export class Campus {
   private buildings = new Map<ComponentId, Building>();
   private markers: Graphics[] = [];
   private selection = new Graphics();
+  private requestPath = new Graphics();
+  private inspection?: RequestView;
   private snapshot?: Snapshot;
   private ready = false;
   private reduced = false;
@@ -59,6 +63,8 @@ export class Campus {
     ground.poly([-10, 338, 627, 13, 1172, 291, 545, 615]).fill(0x8ea2a8).stroke({ width: 2, color: 0xe1e7e3 });
     ground.poly([20, 337, 627, 28, 1140, 291, 545, 599]).stroke({ width: 1, color: 0xb7c8cb, alpha: 0.6 });
     this.world.addChild(ground, this.roads, this.selection);
+    this.requestPath.zIndex = 3;
+    this.world.addChild(this.requestPath);
     const add = (id: ComponentId, label: string, point: Point) => {
       const container = new Container();
       container.zIndex = 2;
@@ -142,7 +148,30 @@ export class Campus {
     const point = this.point(selected);
     this.selection.clear().ellipse(point.x, point.y + 12, 78, 43).stroke({ color: 0xe5f3ec, width: 2, alpha: 0.9 });
     this.labels();
+    this.drawRequest();
+  }
+
+  follow(view?: RequestView): void {
+    this.inspection = view;
+    if (!this.ready) return;
+    this.drawRequest(); this.labels();
+  }
+
+  private drawRequest(): void {
     this.renderDirty = true;
+    const g = this.requestPath.clear(), view = this.inspection;
+    if (!view) return;
+    const line = (from: ComponentId, to: ComponentId, active: boolean) => {
+      const a = this.point(from), b = this.point(to);
+      g.moveTo(a.x, a.y + 12).lineTo(b.x, b.y + 12).stroke({ color: active ? 0xe5a525 : 0x185b87,
+        width: (active ? 4 : 2) / this.world.scale.x, alpha: active ? 1 : .6 });
+    };
+    for (const [from, to] of view.path) line(from, to, false);
+    if (view.segment) line(...view.segment, true);
+    if (view.component) {
+      const point = this.point(view.component);
+      g.ellipse(point.x, point.y + 12, 87, 49).stroke({ color: 0xe5a525, width: 3 / this.world.scale.x });
+    }
   }
 
   render(displayTime = this.snapshot?.now ?? 0): void {
@@ -150,8 +179,7 @@ export class Campus {
     if (!snapshot || !this.ready) return;
     if (!this.renderDirty && (displayTime === this.renderedAt || this.reduced)) return;
     this.renderDirty = false; this.renderedAt = displayTime;
-    const events = snapshot.events.filter(e => e.request !== undefined && displayTime - e.at >= 0 && displayTime - e.at < 400_000 && this.segment(e));
-    const selected = events.slice(-200);
+    const selected = backgroundEvents(snapshot, displayTime, this.inspection?.event.request);
     this.markers.forEach((marker, index) => {
       const event = selected[index];
       marker.visible = !this.reduced && event !== undefined;
@@ -159,7 +187,7 @@ export class Campus {
       const [from, to] = this.segment(event)!;
       const progress = Math.min(1, (displayTime - event.at) / 400_000);
       marker.position.set(from.x + (to.x - from.x) * progress, from.y + (to.y - from.y) * progress + 12);
-      marker.tint = event.kind === 'attempt-failed' || (event.kind === 'terminal' && !event.message.endsWith('success')) ? colors.red : event.kind === 'retry' ? colors.amber : 0xffffff;
+      marker.tint = event.kind === 'attempt-failed' || (event.kind === 'terminal' && event.outcome !== 'success') ? colors.red : event.kind === 'retry' ? colors.amber : 0xffffff;
       marker.alpha = 1 - progress * 0.6;
       marker.label = String(event.request);
     });
@@ -198,6 +226,7 @@ export class Campus {
     this.world.scale.set(transform.scale);
     this.world.position.set(transform.x, transform.y);
     this.renderDirty = true;
+    this.drawRequest();
     this.labels();
     const zoom = document.getElementById('map-zoom');
     if (zoom) zoom.textContent = `${Math.round(this.view.zoom * 100)}%`;
@@ -208,6 +237,7 @@ export class Campus {
     const area = this.area;
     const needsAttention = (b: Building) => [colors.red, colors.amber].includes(b.color) || b.status.startsWith('Draining');
     const ordered = [...this.buildings.entries()].sort(([a, x], [b, y]) =>
+      Number(b === this.inspection?.component) - Number(a === this.inspection?.component) ||
       Number(b === this.selected) - Number(a === this.selected) ||
       Number(needsAttention(y)) - Number(needsAttention(x)));
     this.leaders.clear();
@@ -217,20 +247,25 @@ export class Campus {
     let used = 0, collapsed = 0;
     for (const [id, building] of ordered) {
       const isSelected = id === this.selected;
+      const isFollowed = id === this.inspection?.component;
       const attention = needsAttention(building);
       const label = building.label;
       label.hidden = false;
       label.setAttribute('aria-pressed', String(isSelected));
-      label.classList.toggle('detailed', isSelected || attention);
-      label.querySelector('span')!.textContent = building.status;
-      label.setAttribute('aria-label', `${id === 'clients' ? 'Clients' : id === 'nginx' ? 'NGINX' : id === 'redis' ? 'Redis' : id}: ${building.status}. Inspect component`);
+      label.classList.toggle('detailed', isSelected || isFollowed || attention);
+      label.classList.toggle('request-event', isFollowed);
+      const occupancy = this.snapshot && (id.startsWith('app') || id === 'redis') ? pressure(this.snapshot, id) : [];
+      const current = occupancy.map(([name, value]) => `${name} ${value}`).join(' · ');
+      const active = occupancy.filter(([name, value]) => value > 0 && !(id === 'redis' && name === 'Queued')).map(([name, value]) => `${name} ${value}`).join(' · ');
+      label.querySelector('span')!.textContent = `${building.status}${active ? ` · ${active}` : ''}${isFollowed ? ` · Historical: ${this.inspection!.title}` : ''}`;
+      label.setAttribute('aria-label', `${id === 'clients' ? 'Clients' : id === 'nginx' ? 'NGINX' : id === 'redis' ? 'Redis' : id}: ${building.status}. ${current}. ${isFollowed ? `Historical event: ${this.inspection!.title}. ` : ''}Inspect component`);
       const anchor = { x: this.world.x + (building.point.x - 85) * scale,
         y: this.world.y + (building.point.y - 85) * scale, width: 170 * scale, height: 140 * scale };
       if (!overlaps(anchor, area)) { label.hidden = true; collapsed++; continue; }
       const size = { width: label.offsetWidth, height: label.offsetHeight };
-      const placement = placeLabel(anchor, size, area, occupied, isSelected || attention);
+      const placement = placeLabel(anchor, size, area, occupied, isSelected || isFollowed || attention);
       const budget = area.width * area.height * 0.22;
-      if (!placement || (!isSelected && !attention && used + size.width * size.height > budget)) {
+      if (!placement || (!isSelected && !isFollowed && !attention && used + size.width * size.height > budget)) {
         label.hidden = true; collapsed++; continue;
       }
       label.style.left = `${placement.x}px`; label.style.top = `${placement.y}px`;
@@ -253,19 +288,8 @@ export class Campus {
   }
   private point(id: ComponentId): Point { return this.buildings.get(id)?.point ?? { x: 660, y: 300 }; }
   private segment(e: SemanticEvent): [Point, Point] | undefined {
-    const backend = this.point(`app${e.backend ?? 1}`);
-    const proxy = this.point('nginx'), redis = this.point('redis'), clients = this.point('clients');
-    switch (e.kind) {
-      case 'arrival': return [clients, proxy];
-      case 'routing': return [proxy, backend];
-      case 'queue': case 'processing': case 'sleep': return [backend, { x: backend.x + 8, y: backend.y - 24 }];
-      case 'redis-send': return [backend, redis];
-      case 'redis-queue': case 'redis-execute': return [redis, { x: redis.x + 8, y: redis.y - 20 }];
-      case 'redis-ack': return [redis, backend];
-      case 'response': case 'attempt-failed': case 'retry': return [backend, proxy];
-      case 'terminal': return [proxy, clients];
-      default: return undefined;
-    }
+    const segment = this.snapshot && eventLocation(e, this.snapshot).segment;
+    return segment && [this.point(segment[0]), this.point(segment[1])];
   }
   private paint(id: ComponentId, color: number, status: string): void {
     const b = this.buildings.get(id)!;

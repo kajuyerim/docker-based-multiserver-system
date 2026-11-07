@@ -69,7 +69,48 @@ Comparison uses every terminal latency sample in the observation window, the exa
 
 ## View and accessibility
 
-PixiJS consumes frozen snapshots and never advances the model. Movement is illustrative: up to 200 pooled markers represent sampled semantic events, stretched to a 400 ms visual journey. Their positions and counts are not latency or throughput measurements. The request console records actual simulated timestamps and attempt/operation identities, including detached Redis commits. Canvas selection has an equivalent native component selector and buttons. State names, queue counts, and the text summary supplement colors. Reduced motion removes moving markers while preserving the model and controls.
+PixiJS consumes frozen snapshots and never advances the model. Movement is illustrative: up to 200 pooled markers represent sampled transport events, stretched to a 400 ms visual journey. Their positions and counts are not latency or throughput measurements. CPU queueing, execution, sleep and Redis queueing/execution use separate exact text counts rather than indistinguishable local trips. The request console records actual simulated timestamps and attempt/operation identities, including detached Redis commits. Canvas selection has an equivalent native component selector and buttons. State names, queue counts, and the text summary supplement colors. Reduced motion removes moving markers while preserving the model and controls.
+
+### Following one request
+
+Free-running exploration is the default. Console Inspect/Latest request or selecting
+a flow marker enables Follow request. Previous event, Next event, the event list and
+Latest event provide native keyboard controls. A fixed historical cursor stays on
+its event as new records arrive; Latest event follows the newest retained record.
+Stop following removes the reserved scene path without changing the experiment.
+
+The selected request has a separate static path and amber event-component outline,
+outside the 200-marker pool, also present with reduced motion. Its background markers
+are suppressed to avoid overlapping animated interpretations. Path edges accumulate
+only through the inspected event and do not encode travel duration. Inspection does
+not pan the camera automatically; Inspect event component selects its available
+current component, and Focus selected is an explicit navigation action.
+
+Every event detail says **historical**, displays its absolute and request-relative
+timestamp, and shows current system time separately. Current pressure is never
+rewound: no historical queue snapshot is implied. Backend counters/labels distinguish
+CPU queued, CPU active, sleeping and Redis-waiting requests. Redis shows queued,
+executing and in-transport operations; transport combines outbound commands and
+returning replies. Detached is a subset across those phases, not another additive
+phase. All displayed occupancy counts are exact; background markers remain sampled.
+Metric buttons link to their component and cohort/count explanation.
+Map labels omit zero occupancy details to keep idle/stopped labels compact; their
+accessible names, the Inspector and trace detail retain all exact current counts.
+
+Events preserve request, attempt, operation and originating backend/incarnation;
+Redis commands preserve command kind and the result of each INCR. An interleaved
+later update cannot replace an earlier operation's result. PUBLISH execution is
+distinct from INCR updating in memory, disk durability and browser delivery. Client
+termination does not erase accepted Redis work: a trace can record a later command
+execution after its client failed. Retries retain the same offered request identity.
+
+One selected trace remains pinned beyond the recent 100-request buffer. Each trace
+keeps its first 64 events and reports any later omitted-event count. Unretained
+requests explicitly report unavailable history; the view does not reconstruct it.
+An old process is not highlighted on a restarted or removed backend: its recorded
+identity remains visible with a location warning. Redis-side evidence can still be
+shown at Redis. All navigation/projection is observational and excluded from the
+command log, scheduler and random stream.
 
 The view fills the viewport. A shared DOM layout measures the header, workload,
 playback and active panel rectangles, then fits the actual component/path bounds
@@ -79,7 +120,7 @@ be collapsed and reopened through Details without restarting it. Resizing and
 opening panels never advance or reset the model.
 
 Component labels are native buttons with a 12 CSS-pixel minimum for names and
-state text. Selection has first priority, followed by stopped/queueing/draining
+state text. A followed event has first priority, then selection and stopped/queueing/draining
 components; other labels show names and use a 22% scene-area budget. Priority labels
 can relocate into nearby free space, with connector lines for distant placement.
 The selected building's footprint is reserved against all label placement.

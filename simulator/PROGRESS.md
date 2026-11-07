@@ -206,3 +206,78 @@ and model Step. Test/assertion/job limits and zero retries remain unchanged.
 The revised production bundle passed all 38 browser checks (36 Chromium and two
 WebKit), plus 75 unit checks and build/typecheck. The draw-call regression also
 covers selection, topology changes, reduced-motion changes, reset and resume.
+
+## S1 / #46 — request inspection, event evidence
+
+Phase 1 preserves Redis operation origin (request, attempt, backend incarnation),
+command kind and each INCR result through execution and acknowledgment. Terminal
+outcomes are typed and trace truncation has an explicit omitted-event count. No
+service cost, scheduler deadline or workload rule changes. Detached/restarted-origin
+and interleaved-INCR fixtures verify that later shared counts cannot replace an
+earlier reply's result. All 76 tests and typecheck passed; the opt-in benchmark was
+skipped. Pitfall review passed: real backend/proxy/container contracts are untouched.
+
+Phase 2 adds the observational request cursor, persistent static path outside the
+background pool, historical event/component explanation, exact current pressure,
+and metric-to-component links. Native event buttons are retained across updates so
+keyboard focus survives new evidence. Old process identities do not map onto new
+incarnations or removed buildings. Model results, workload and commands match an
+uninspected run; a separate fixture fills all 200 background transport markers while
+the pinned request path survives. All 84 unit/view checks and build/typecheck pass.
+
+Ten targeted desktop/phone journeys passed, covering root, slow, retry, update before
+client failure, and queue growth/recovery. The existing layout/zoom checks exposed
+overlong zero-occupancy labels; omitting zero details from map text restored eight
+stopped phone labels and the real 200% zoom journey. Full exact counts remain in
+accessible labels, Inspector and trace text; metric buttons also expose current
+readings as accessible descriptions. The final complete browser run and fresh PR
+review remain required. No real backend/proxy/container changes; pitfall review PASS.
+
+Phase 3 completes all 48 production-browser checks (46 Chromium and two WebKit)
+in 171.413 s, zero retries/flaky results, after the 84 unit/view checks and
+production build/typecheck. Inspected actual desktop/phone request evidence and
+scene captures: queue growth/recovery, retry, retained INCR and selected paths.
+The initial full run passed 47/48; mobile WebKit reported a non-finite value
+inside Playwright's injected hit-target listener while mouse-clicking Step after
+a focused range adjustment. Protocol click coordinates were finite and the click
+subsequently succeeded; the precise native-event cause was not captured. The
+touch-enabled smoke now activates through native taps (including trial hit checks),
+while desktop keeps clicks and both retain keyboard checks. Three focused native-
+tap runs and the full suite passed. Assertions, limits and fatal error collection
+are unchanged. Evidence: /tmp/s1-46-full/results.json and its screenshot/report
+artifacts, with source/bundle/lock SHA-256 provenance. Touch is browser emulation.
+Fresh exact-head PR review and hosted CI remain the merge gates.
+
+Fresh review of initial PR #60 found a pending-connection restart edge case:
+release removed the Attempt before retry/terminal evidence read its incarnation,
+so the current backend's newer incarnation could replace the original identity.
+The logical request now retains its current attempt's captured incarnation through
+release; Redis operation origin still takes precedence. Scheduling/event order is
+unchanged. A regression first reproduced the bug, then passed for retries enabled
+and disabled, including historical warnings and absent old-process path segments.
+All 85 unit/view checks, build/typecheck, and seven targeted retry/INCR/Chromium/
+WebKit browser checks pass. A new fresh review is required on the corrected head.
+
+Hosted browser run 42415780253 passed 45/46 checks but timed out capturing the
+recovered queue scene after all state assertions passed. Its downloaded artifact
+13590918960 matched GitHub's SHA-256 and the reviewed source/bundle/lock hashes.
+The trace showed 199 synchronous Step actions in 825 ms, a WebGL queue warning,
+and subsequent rendering delay. A controlled unchanged-bundle comparison at 4×
+CPU throttling performed the same 2,266 draw calls and produced identical final
+evidence; yielding between steps allowed 199 animation frames instead of zero and
+reduced the maximum observed frame gap from 3.7 s to 0.9 s. The eight-second CI
+capture timeout was not reproduced locally, so the precise cause remains inferred.
+The test helper now yields one animation frame after every public Step click; no
+model work, rendering, assertions, timeouts or retries are skipped or changed. All
+ten request journeys and typecheck passed after this harness-only correction.
+Full repository CI 42415780219 passed on the unchanged application source. A new
+fresh exact-head review and browser CI are required before merge.
+
+A fresh full run of the paced head passed all 46 Chromium checks and WebKit phone,
+but desktop WebKit reported an intermittent injected hit-target exception while
+closing the scrolled workload disclosure. Functional assertions completed; three
+unchanged diagnostic repetitions passed, so that did not establish a clean full
+run. The smoke journey now uses the existing explicit Return to map button and
+asserts both disclosure closure and summary focus. Three desktop and three phone
+WebKit runs passed with error collection intact, plus typecheck. No application
+source changed. A clean complete run and fresh exact-head review remain required.

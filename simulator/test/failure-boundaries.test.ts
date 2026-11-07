@@ -92,8 +92,26 @@ describe('commit, acknowledgment, and deadline boundaries', () => {
       const operationEvents = events.filter(event => event.operation === sent.operation);
       expect(operationEvents.some(event => event.kind === 'redis-commit')).toBe(true);
       expect(operationEvents.every(event => event.attempt === sent.attempt && event.request === 1)).toBe(true);
+      expect(operationEvents.every(event => event.backend === 1 && event.incarnation === 1 && event.redisCommand === 'incr')).toBe(true);
+      expect(operationEvents.find(event => event.kind === 'redis-commit')!.redisResult).toBe(1);
+      expect(engine.snapshot().backends[0]!.incarnation).toBe(2);
       expect(events.filter(event => event.kind === 'terminal')).toHaveLength(1);
+      expect(events.find(event => event.kind === 'terminal')!.outcome).toBe(retry ? 'success' : 'proxy_failure');
     }
+  });
+
+  it('retains each INCR result through its reply instead of substituting the later shared counter', () => {
+    const engine = new Engine({ replicas: 2, rate: 4, jitter: 0, redisRttMs: 1000 });
+    engine.command({ type: 'traffic', rate: 0 }, 26);
+    engine.runFor(3);
+    const snapshot = engine.snapshot(), [first, second] = snapshot.traces;
+    const reply = first!.events.find(e => e.kind === 'redis-ack' && e.redisCommand === 'incr')!;
+    const laterCommit = second!.events.find(e => e.kind === 'redis-commit' && e.redisCommand === 'incr')!;
+    expect(snapshot.totals.offered).toBe(2); expect(snapshot.totals.globalCount).toBe(2);
+    expect(laterCommit.at).toBeLessThan(reply.at);
+    expect(reply.redisResult).toBe(1); expect(laterCommit.redisResult).toBe(2);
+    expect(first!.events.filter(e => e.redisCommand === 'publish').every(e => e.redisResult === undefined)).toBe(true);
+    expect(first!.omittedEvents).toBe(0);
   });
 
   it('enforces the twelve-second drain budget when admitted work exceeds it', () => {

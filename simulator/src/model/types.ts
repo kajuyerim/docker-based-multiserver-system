@@ -24,7 +24,11 @@ export interface SemanticEvent {
   request?: number;
   attempt?: number;
   backend?: number;
+  incarnation?: number;
   operation?: number;
+  redisCommand?: 'incr' | 'publish';
+  redisResult?: number;
+  outcome?: Outcome;
 }
 export interface Trace {
   id: number;
@@ -33,6 +37,7 @@ export interface Trace {
   finishedAt?: number;
   outcome?: Outcome;
   events: SemanticEvent[];
+  omittedEvents: number;
 }
 export interface Completion {
   id: number;

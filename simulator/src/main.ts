@@ -3,7 +3,7 @@ import { Engine } from './model/engine';
 import { Clock } from './model/clock';
 import { DEFAULT_CONFIG, MODEL_VERSION } from './model/config';
 import type { Config } from './model/config';
-import type { Command, Trace, DeepReadonly } from './model/types';
+import type { Command } from './model/types';
 import { MetricsHistory } from './metrics/metrics';
 import type { Metrics } from './metrics/metrics';
 import { Campus, backendState } from './view/campus';
@@ -11,10 +11,11 @@ import type { ComponentId } from './view/campus';
 import { Experiment, SCENARIOS } from './scenarios/scenarios';
 import type { ScenarioId } from './scenarios/scenarios';
 import { ComparisonPanel } from './ui/comparison-panel';
+import { RequestPanel } from './ui/request-panel';
+import { metricTarget, pressure } from './view/request-view';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string): T => document.getElementById(id) as T;
 const number = (value: number, digits = 0) => value.toLocaleString('en', { maximumFractionDigits: digits });
-const escape = (value: string) => value.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
 const slider = (id: string, label: string, value: number, min: number, max: number, unit: string, step = 1, help = '') => `
   <div class="control"><label for="${id}">${label}<output id="${id}-value" for="${id}">${value}${unit}</output></label>
   <input id="${id}" type="range" min="${min}" max="${max}" step="${step}" value="${value}" />
@@ -59,7 +60,10 @@ $('app').innerHTML = `
   <section id="comparison-panel" class="comparison-panel overlay" aria-label="Baseline comparison" data-scene-overlay hidden></section>
   <section id="diagnostics" class="diagnostics overlay" aria-label="Simulation console" data-scene-overlay hidden><div class="panel-heading"><h2>CONSOLE</h2><button data-reading aria-expanded="false">Read details</button><button id="close-diagnostics" aria-label="Close console">×</button></div><div class="console-grid">
     <section><div class="card-header"><h2>Throughput</h2><span class="small muted">60 simulated seconds</span></div><svg id="chart" class="chart" viewBox="0 0 600 135" role="img" aria-label="Recent offered and successful throughput; current values appear in the top instruments."></svg><div class="chart-caption">— Offered &nbsp; — Successful</div></section>
-    <section><div class="card-header"><h2>Request trace</h2><button id="latest-trace">Latest</button></div><div class="button-row"><label for="trace-id">Request</label><input id="trace-id" type="number" min="1" step="1" value="1"><button id="inspect-trace">Inspect</button><span id="trace-result" class="muted">Waiting for traffic</span></div><ol id="trace-list" class="trace-list"></ol></section>
+    <section id="request-panel"><div class="card-header"><h2>Request trace</h2><button id="latest-trace">Latest request</button></div><div class="button-row"><label for="trace-id">Request</label><input id="trace-id" type="number" min="1" step="1" value="1"><button id="inspect-trace">Inspect</button><span id="trace-result" class="muted">Waiting for traffic</span></div>
+      <div class="trace-controls"><button id="follow-request" aria-pressed="false">Follow request</button><button id="trace-previous">Previous event</button><button id="trace-next">Next event</button><button id="trace-latest-event" aria-pressed="true">Latest event</button></div>
+      <div id="trace-evidence"><h3 id="trace-event-title"></h3><p id="trace-event-identity"></p><p id="trace-event-time"></p><p id="trace-event-explanation"></p><p id="trace-event-location"></p><p id="trace-current-pressure"></p><button id="trace-component">Inspect event component</button></div>
+      <p id="trace-retention" class="small muted"></p><ol id="trace-list" class="trace-list"></ol></section>
   </div><details class="text-summary" open><summary>System summary & counters</summary><p id="summary"></p><div class="scroll-table"><table><caption class="sr-only">Replica state and request distribution</caption><thead><tr><th>Replica</th><th>State</th><th>CPU queue</th><th>Sleeping</th><th>Redis wait</th><th>Attempts</th><th>Local count</th></tr></thead><tbody id="replica-table"></tbody></table></div></details></section>
 </div>
 <dialog id="intro-dialog" aria-labelledby="intro-title"><div class="panel-heading"><h2 id="intro-title">OPERATING THE MODEL</h2></div><ol><li><strong>Set traffic.</strong> Requests enter through NGINX, reach a Go process, and use the shared Redis service.</li><li><strong>Select a component.</strong> Change capacity, stop a process, or interrupt Redis. Watch the queues and client outcomes.</li><li><strong>Inspect the evidence.</strong> The console shows individual request traces, counters, and throughput history.</li></ol><p>These are teaching values, not measurements of the real stack. The model never connects to Docker or production services. It is not an emulator or production monitor.</p><p class="guide-links"><a href="${import.meta.env.BASE_URL}model.txt" target="_blank" rel="noreferrer">Model assumptions</a> · <a href="${import.meta.env.BASE_URL}notices.txt" target="_blank" rel="noreferrer">Asset and dependency notices</a></p><button id="close-intro">Return to simulation</button></dialog>
@@ -75,8 +79,19 @@ let history = new MetricsHistory();
 let snapshot = engine.snapshot();
 let metrics = history.observe(snapshot);
 let selected: ComponentId = 'nginx';
-let trace: DeepReadonly<Trace> | undefined;
-let selectedRequest = 1;
+const requestPanel = new RequestPanel($('request-panel'));
+for (const [metric, label] of Object.entries({ throughput: 'Inspect successful throughput', errors: 'Inspect client errors', p95: 'Inspect completed latency', pending: 'Inspect in-flight requests', global: 'Inspect global counter' })) {
+  const vital = $(metric).closest('.vital')!;
+  const button = document.createElement('button'); button.className = 'vital'; button.dataset.metric = metric;
+  button.setAttribute('aria-label', label); button.title = label;
+  button.append(...vital.childNodes); vital.replaceWith(button);
+}
+for (const [metric, label] of Object.entries({ cpu: 'Inspect CPU utilization', 'redis-util': 'Inspect Redis utilization', queue: 'Inspect queued work' })) {
+  const value = $(metric), button = document.createElement('button');
+  button.id = metric; button.dataset.metric = metric; button.className = 'metric-value';
+  button.setAttribute('aria-label', label); button.title = label; button.textContent = value.textContent;
+  value.replaceWith(button);
+}
 let pendingFeedback = false;
 let pendingFeedbackTick = 0;
 const pendingControls = new Map<string, number>();
@@ -142,14 +157,14 @@ function updateInspector(): void {
   let state = '', rows: [string, string][] = [];
   if (b) {
     state = `${backendState(b)} · process ${b.incarnation}`;
-    rows = [['In flight', String(b.inFlight)], ['CPU queue', String(b.cpuQueue)], ['Sleeping / Redis', `${b.sleeping} / ${b.redisWaiting}`], ['Local counter', number(b.localCount)], ['Proxy eligibility', b.withdrawn ? 'Withdrawn' : b.excludedUntil > snapshot.now && snapshot.backends.length > 1 ? 'Excluded' : 'Eligible']];
+    rows = [['In flight', String(b.inFlight)], ...pressure(snapshot, selected).map(([label, value]): [string, string] => [label, String(value)]), ['Local counter', number(b.localCount)], ['Proxy eligibility', b.withdrawn ? 'Withdrawn' : b.excludedUntil > snapshot.now && snapshot.backends.length > 1 ? 'Excluded' : 'Eligible']];
     $('inspector-body').querySelectorAll<HTMLButtonElement>('[data-action]').forEach(button => {
       const action = button.dataset.action;
       button.disabled = (action === 'stop' && b.state === 'stopped') || (action === 'drain' && (b.state === 'draining' || b.state === 'stopped')) || (action === 'remove' && (snapshot.backends.filter(b => !b.removing).length <= 1 || b.removing)) || (action === 'restart' && b.removing);
     });
   } else if (selected === 'redis') {
     state = snapshot.redis.online ? snapshot.redis.active ? 'Busy' : 'Idle' : 'Offline · data retained';
-    rows = [['Global counter', number(snapshot.totals.globalCount)], ['Execution queue', number(snapshot.redis.queue)], ['Outstanding operations', number(snapshot.redis.operations)], ['Detached from caller', number(snapshot.redis.detached)], ['Publish failures', number(snapshot.totals.publishFailures)]];
+    rows = [['Global counter', number(snapshot.totals.globalCount)], ...pressure(snapshot, selected).map(([label, value]): [string, string] => [label, String(value)]), ['Outstanding operations', number(snapshot.redis.operations)], ['Publish failures', number(snapshot.totals.publishFailures)]];
   } else if (selected === 'clients') {
     state = `${number(snapshot.totals.offered)} offered since reset`;
     rows = [['Succeeded', number(snapshot.totals.succeeded)], ['Failed', number(snapshot.totals.failed)], ['Still in flight', number(snapshot.requests.length)], ['Model admissions rejected', number(snapshot.totals.rejected)]];
@@ -171,6 +186,17 @@ function updateMetrics(m: Metrics): void {
     'redis-util': number(m.redisUtilization * 100, 1), global: number(snapshot.totals.globalCount), 'sample-count': number(m.samples),
   };
   for (const [id, value] of Object.entries(values)) $(id).textContent = value;
+  const descriptions: Record<string, string> = {
+    throughput: `${values.throughput} successful requests per second; ${values.offered} offered per second.`,
+    errors: m.errorFraction === null ? 'No completed clients in the rolling window.' : `${values.errors} percent failed among ${values['sample-count']} completed clients.`,
+    p95: m.p95Ms === null ? 'No completed-client latency samples in the rolling window.' : `P95 ${values.p95} milliseconds; average ${values.average} milliseconds.`,
+    pending: `${values.pending} unfinished requests; oldest ${values.oldest} milliseconds.`,
+    cpu: `${values.cpu} percent CPU utilization.`, 'redis-util': `${values['redis-util']} percent Redis execution utilization.`,
+    queue: `${values.queue} queued CPU tasks and Redis commands.`, global: `${values.global} committed INCR operations.`,
+  };
+  for (const button of document.querySelectorAll<HTMLButtonElement>('[data-metric]')) {
+    button.setAttribute('aria-description', descriptions[button.dataset.metric!]!);
+  }
   $('metric-window').textContent = `${number(m.windowSeconds, 1)} s rolling window · modeled`;
   const points = history.points;
   const max = Math.max(1, ...points.map(p => Math.max(p.metrics.offeredRate, p.metrics.successRate)));
@@ -180,13 +206,14 @@ function updateMetrics(m: Metrics): void {
 }
 
 function updateTrace(): void {
-  const fresh = snapshot.traces.find(t => t.id === selectedRequest);
-  if (fresh) { trace = fresh; engine.pinTrace(selectedRequest); }
-  if (!trace || trace.id !== selectedRequest) {
-    $('trace-result').textContent = 'Not in the recent trace buffer'; $('trace-list').innerHTML = ''; return;
-  }
-  $('trace-result').textContent = `${trace.route === 'root' ? 'GET /' : 'GET /slow'} · ${trace.outcome ?? 'in flight'}`;
-  $('trace-list').innerHTML = trace.events.map(e => `<li><time>${((e.at - trace!.startedAt) / 1000).toFixed(1)} ms</time>${escape(e.message)}</li>`).join('');
+  engine.pinTrace(requestPanel.cursor.id);
+  const view = requestPanel.update(snapshot);
+  campus.follow(requestPanel.cursor.following ? view : undefined);
+}
+
+function inspectRequest(id: number): void {
+  requestPanel.cursor.select(id); $<HTMLInputElement>('trace-id').value = String(id);
+  updateTrace(); campus.render();
 }
 
 function updateExperiment(): void {
@@ -270,7 +297,8 @@ function reset(config = initial, commands = initialCommands, running = false): v
   engine = next; pendingFeedback = false; pendingControls.clear();
   history = new MetricsHistory(); clock.reset(); comparison.reset();
   if (running) clock.resume();
-  snapshot = engine.snapshot(); metrics = history.observe(snapshot); trace = undefined; selectedRequest = 1;
+  snapshot = engine.snapshot(); metrics = history.observe(snapshot);
+  requestPanel.reset();
   $<HTMLInputElement>('trace-id').value = '1';
   for (const [id, value] of Object.entries({ rate: config.rate, slow: config.slowPercent, 'slow-seconds': config.slowSeconds, jitter: config.jitter * 100, seed: config.seed })) {
     $<HTMLInputElement>(id).value = String(value);
@@ -296,6 +324,16 @@ function runWithSettings(): void {
 $('app').addEventListener('click', event => {
   const target = (event.target as HTMLElement).closest('button');
   if (!target) return;
+  if (target.dataset.metric) {
+    const { component, explanation } = metricTarget(target.dataset.metric, snapshot);
+    select(component);
+    const note = document.createElement('p'); note.className = 'metric-explanation'; note.textContent = explanation;
+    $('inspector-body').prepend(note); return;
+  }
+  if (target.dataset.traceEvent) {
+    requestPanel.cursor.sequence = Number(target.dataset.traceEvent); requestPanel.cursor.following = true;
+    updateTrace(); campus.render(); return;
+  }
   if (target.dataset.component) { select(target.dataset.component as ComponentId); return; }
   if (target.dataset.action && selected.startsWith('app')) {
     issue({ type: target.dataset.action as 'stop' | 'restart' | 'drain' | 'remove', backend: Number(selected.slice(3)) }); return;
@@ -325,8 +363,12 @@ $('app').addEventListener('click', event => {
       break;
     }
     case 'add-backend': issue({ type: 'add' }); break;
-    case 'latest-trace': selectedRequest = snapshot.traces.reduce((latest, trace) => Math.max(latest, trace.id), 1); $<HTMLInputElement>('trace-id').value = String(selectedRequest); updateTrace(); break;
-    case 'inspect-trace': selectedRequest = Number($<HTMLInputElement>('trace-id').value); updateTrace(); break;
+    case 'latest-trace': inspectRequest(snapshot.traces.reduce((latest, trace) => Math.max(latest, trace.id), 1)); break;
+    case 'inspect-trace': inspectRequest(Number($<HTMLInputElement>('trace-id').value)); break;
+    case 'follow-request': requestPanel.cursor.following = !requestPanel.cursor.following; updateTrace(); campus.render(); break;
+    case 'trace-previous': case 'trace-next': requestPanel.cursor.move(target.id === 'trace-previous' ? -1 : 1); updateTrace(); campus.render(); break;
+    case 'trace-latest-event': requestPanel.cursor.sequence = undefined; requestPanel.cursor.following = true; updateTrace(); campus.render(); break;
+    case 'trace-component': { const view = requestPanel.cursor.view(snapshot); if (view?.component) select(view.component); break; }
     case 'intro': introWasRunning = !clock.paused; clock.pause(); update(); $<HTMLDialogElement>('intro-dialog').showModal(); break;
   }
 });
@@ -375,7 +417,7 @@ renderInspector();
 $('app').dataset.ready = 'loading';
 try {
   await campus.mount($('campus'), select, id => {
-    selectedRequest = id; $<HTMLInputElement>('trace-id').value = String(id); updateTrace();
+    inspectRequest(id);
     $('diagnostics').hidden = false; $('show-diagnostics').setAttribute('aria-expanded', 'true');
   });
   update();
