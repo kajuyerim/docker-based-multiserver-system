@@ -37,6 +37,15 @@ navigation region to use arrows, +/− and Home; Escape cancels movement. Select
 alone preserves manual framing. The Guide also describes these controls. Ctrl/Cmd
 wheel and browser zoom remain available; panels retain their native scrolling.
 
+Open Console, enter a request ID and choose Inspect, or select a flow marker to
+Follow request. Previous/Next event and the event-list buttons inspect retained
+history; Latest event follows new evidence. The static selected path is separate
+from background traffic and stays visible with reduced motion. Event details label
+historical time and the original backend incarnation; queue/counter readings remain
+current. Stop following returns to free exploration. On compact screens, use Read
+details for the full event list, then Return to map (or Escape) to see the path.
+Metric buttons open the relevant component with an explanation of what is counted.
+
 From this directory, test the actual production bundle at its repository base path:
 
 ```sh

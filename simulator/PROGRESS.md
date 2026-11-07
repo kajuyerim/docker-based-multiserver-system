@@ -216,3 +216,19 @@ service cost, scheduler deadline or workload rule changes. Detached/restarted-or
 and interleaved-INCR fixtures verify that later shared counts cannot replace an
 earlier reply's result. All 76 tests and typecheck passed; the opt-in benchmark was
 skipped. Pitfall review passed: real backend/proxy/container contracts are untouched.
+
+Phase 2 adds the observational request cursor, persistent static path outside the
+background pool, historical event/component explanation, exact current pressure,
+and metric-to-component links. Native event buttons are retained across updates so
+keyboard focus survives new evidence. Old process identities do not map onto new
+incarnations or removed buildings. Model results, workload and commands match an
+uninspected run; a separate fixture fills all 200 background transport markers while
+the pinned request path survives. All 84 unit/view checks and build/typecheck pass.
+
+Ten targeted desktop/phone journeys passed, covering root, slow, retry, update before
+client failure, and queue growth/recovery. The existing layout/zoom checks exposed
+overlong zero-occupancy labels; omitting zero details from map text restored eight
+stopped phone labels and the real 200% zoom journey. Full exact counts remain in
+accessible labels, Inspector and trace text; metric buttons also expose current
+readings as accessible descriptions. The final complete browser run and fresh PR
+review remain required. No real backend/proxy/container changes; pitfall review PASS.

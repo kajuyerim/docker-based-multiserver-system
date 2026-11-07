@@ -45,6 +45,9 @@ a { color: #485c69; text-underline-offset: 3px; }
 .live-dot { width: 7px; height: 7px; background: #658c62; border-radius: 50%; }
 .vitals { display: flex; justify-content: flex-end; align-items: stretch; min-width: 0; overflow-x: auto; scrollbar-width: thin; }
 .vital { flex: 0 0 auto; min-width: 125px; padding: 9px 15px 7px; border-left: 1px solid #e1e4e2; font-variant-numeric: tabular-nums; }
+button.vital { text-align: left; }
+.metric-value { font: inherit; padding: 0 2px; min-height: 0; text-decoration: underline; text-underline-offset: 3px; }
+.metric-explanation { padding: 8px; margin-bottom: 12px; border-left: 3px solid #216392; background: #e9eff1; }
 .vital > span { display: block; font-size: 9px; letter-spacing: 1.2px; color: var(--muted); white-space: nowrap; }
 .vital > strong { display: block; font: 17px var(--mono); line-height: 1.5; }
 .vital b { font-weight: inherit; }
@@ -105,6 +108,14 @@ details summary { cursor: pointer; font-size: 10px; color: #53636e; padding: 4px
 .trace-list { margin: 12px 0; padding-left: 18px; max-height: 160px; overflow-y: auto; font-size: 10px; line-height: 1.7; }
 .trace-list li { margin: 4px 0; }
 .trace-list time { font-family: var(--mono); color: var(--muted); margin-right: 8px; }
+.trace-list button { text-align: left; width: 100%; font-size: 12px; }
+.trace-controls { display: flex; flex-wrap: wrap; gap: 4px; margin: 10px 0; }
+.trace-controls button { border-color: var(--line); }
+#trace-evidence { padding: 10px; border-left: 3px solid #bd8420; background: #f0eee4; }
+#trace-evidence h3 { margin: 0 0 6px; font-size: 13px; }
+#trace-evidence p { margin: 5px 0; font-size: 12px; }
+#trace-event-identity, #trace-event-time { color: #485b65; }
+#trace-retention { margin-top: 8px; }
 #trace-result { font-size: 10px; }
 .text-summary { border-top: 1px solid var(--line); padding-top: 12px; margin-top: 15px; }
 .text-summary p { margin: 10px 0; font-size: 11px; }
@@ -171,6 +182,7 @@ dialog > button { margin-top: 17px; border-color: #a0afb6; }
 .component-label span { display: none; font-size: 12px; color: #485b65; }
 .component-label.detailed span { display: block; }
 .component-label[aria-pressed=true] { outline: 2px solid #216392; outline-offset: 2px; background: #fff; }
+.component-label.request-event { outline: 3px solid #bd8420; outline-offset: 2px; background: #fff8df; }
 [data-reading] { display: inline-block; }
 .diagnostics, .comparison-panel { top: auto; left: 240px; right: 12px; width: auto;
   bottom: calc(var(--transport-height, 56px) + 8px); max-height: 36dvh; }
