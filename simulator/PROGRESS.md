@@ -192,3 +192,17 @@ bundle and lock hashes. The final 16 expanded experiment-panel, scroll, layout a
 input journeys also passed without retries. Fresh PR review and hosted CI remain
 the delivery gates. The diff does not change engine
 scheduling, backend handlers, proxy or containers; pitfall review passed.
+
+The first hosted #55 browser run exposed continuous WebGL drawing while paused:
+tablet traces showed 2–8 fps and 4–5.6 s captures before three test/action timeouts
+and the suite limit. Artifact 13589644524 was SHA-256 verified and its source,
+bundle and lock hashes matched the locally tested head. An independent controlled
+profile observed 448 draw calls in two paused seconds; suppressing unchanged paused
+frames reduced that to zero and capture from 521 ms to 78 ms, with unchanged model
+time/zoom. Campus now skips an unchanged display time (and unchanging reduced-motion
+frames), with explicit invalidation for snapshots and viewport changes. A real
+WebGL draw-call regression checks idle stability and redraw after zoom, focus, fit
+and model Step. Test/assertion/job limits and zero retries remain unchanged.
+The revised production bundle passed all 38 browser checks (36 Chromium and two
+WebKit), plus 75 unit checks and build/typecheck. The draw-call regression also
+covers selection, topology changes, reduced-motion changes, reset and resume.

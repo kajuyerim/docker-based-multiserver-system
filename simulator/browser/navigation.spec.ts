@@ -1,6 +1,63 @@
 import { test, expect, open, pause, actionable } from './fixtures';
 import { sceneCenter } from './navigation-journey';
 
+test('paused navigation redraws only when the visible scene changes', async ({ page }) => {
+  await page.addInitScript(() => {
+    const counter = window as unknown as { renderCalls: number }; counter.renderCalls = 0;
+    for (const context of [WebGLRenderingContext, WebGL2RenderingContext]) {
+      const prototype = context.prototype as unknown as Record<string, (...args: unknown[]) => unknown>;
+      for (const method of ['drawElements', 'drawArrays', 'drawElementsInstanced', 'drawArraysInstanced']) {
+        const original = prototype[method];
+        if (original) prototype[method] = function (this: unknown, ...args: unknown[]) {
+          counter.renderCalls++; return Reflect.apply(original, this, args);
+        };
+      }
+    }
+  });
+  await open(page); await pause(page);
+  const draws = () => page.evaluate(() => (window as unknown as { renderCalls: number }).renderCalls);
+  expect(await draws()).toBeGreaterThan(0);
+  const stable = async () => {
+    let previous = -1, unchanged = 0;
+    await expect.poll(async () => {
+      const current = await draws(); unchanged = current === previous ? unchanged + 1 : 0; previous = current;
+      return unchanged;
+    }, { intervals: [100] }).toBeGreaterThanOrEqual(3);
+    return previous;
+  };
+  const before = await stable(), time = await page.locator('#sim-time').innerText();
+  await page.getByRole('button', { name: 'Zoom in', exact: true }).click();
+  expect(await stable()).toBeGreaterThan(before);
+  await expect(page.locator('#sim-time')).toHaveText(time);
+  const zoomed = await draws();
+  await page.getByLabel('Inspect component', { exact: true }).selectOption('redis');
+  await page.getByRole('button', { name: 'Focus selected', exact: true }).click();
+  expect(await stable()).toBeGreaterThan(zoomed);
+  await page.getByRole('button', { name: 'Fit map', exact: true }).click();
+  await expect(page.locator('#map-zoom')).toHaveText('100%');
+  const fitted = await stable();
+  await page.locator('#step').click();
+  expect(await stable()).toBeGreaterThan(fitted);
+  await expect(page.locator('#sim-time')).not.toHaveText(time);
+  await page.getByLabel('Inspect component', { exact: true }).selectOption('nginx');
+  const selected = await stable();
+  await page.locator('#add-backend').click(); await page.locator('#step').click();
+  await expect(page.locator('#inspect-component option[value=app4]')).toHaveCount(1);
+  expect(await stable()).toBeGreaterThan(selected);
+  const expanded = await draws();
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  expect(await stable()).toBeGreaterThan(expanded);
+  await page.emulateMedia({ reducedMotion: 'no-preference' });
+  const reduced = await stable();
+  await page.locator('#reset').click();
+  await expect(page.locator('#sim-time')).toHaveText('0.00 s');
+  expect(await stable()).toBeGreaterThan(reduced);
+  const reset = await draws();
+  await page.locator('#pause').click();
+  await expect(page.locator('#sim-time')).not.toHaveText('0.00 s');
+  expect(await draws()).toBeGreaterThan(reset);
+});
+
 test('keyboard map controls preserve native input and modified-wheel browser zoom', async ({ page }) => {
   await open(page); await pause(page);
   const before = await page.locator('#sim-time, #global').allTextContents();

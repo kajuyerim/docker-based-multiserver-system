@@ -38,6 +38,8 @@ export class Campus {
   private selected: ComponentId = 'nginx';
   private view = new Viewport();
   private navigation?: MapNavigation;
+  private renderedAt?: number;
+  private renderDirty = true;
 
   async mount(host: HTMLElement, onSelect: (id: ComponentId) => void, onRequest: (id: number) => void): Promise<void> {
     this.host = host;
@@ -140,11 +142,14 @@ export class Campus {
     const point = this.point(selected);
     this.selection.clear().ellipse(point.x, point.y + 12, 78, 43).stroke({ color: 0xe5f3ec, width: 2, alpha: 0.9 });
     this.labels();
+    this.renderDirty = true;
   }
 
   render(displayTime = this.snapshot?.now ?? 0): void {
     const snapshot = this.snapshot;
     if (!snapshot || !this.ready) return;
+    if (!this.renderDirty && (displayTime === this.renderedAt || this.reduced)) return;
+    this.renderDirty = false; this.renderedAt = displayTime;
     const events = snapshot.events.filter(e => e.request !== undefined && displayTime - e.at >= 0 && displayTime - e.at < 400_000 && this.segment(e));
     const selected = events.slice(-200);
     this.markers.forEach((marker, index) => {
@@ -192,6 +197,7 @@ export class Campus {
     const transform = this.view.transform;
     this.world.scale.set(transform.scale);
     this.world.position.set(transform.x, transform.y);
+    this.renderDirty = true;
     this.labels();
     const zoom = document.getElementById('map-zoom');
     if (zoom) zoom.textContent = `${Math.round(this.view.zoom * 100)}%`;
