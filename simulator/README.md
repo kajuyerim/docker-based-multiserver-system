@@ -95,6 +95,13 @@ test-only extension in an isolated temporary browser profile; it asserts the
 resulting CSS viewport as well as usable controls. That extension is never included
 in the site bundle or installed into a personal browser profile.
 
+Request-following journeys cover root success, sleeping without CPU occupancy,
+retry within one offered request, an INCR update before client failure, and queue
+growth/recovery on desktop and touch-emulated phone with reduced motion. They
+inspect the recorded event sequence, current versus historical state, metric links,
+keyboard controls and matched scene/evidence screenshots. A separate model/view
+fixture fills the 200-marker pool and verifies that a pinned trace survives it.
+
 ## GitHub Pages
 
 The project base is `/docker-based-multiserver-system/`. Open the

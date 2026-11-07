@@ -232,3 +232,18 @@ stopped phone labels and the real 200% zoom journey. Full exact counts remain in
 accessible labels, Inspector and trace text; metric buttons also expose current
 readings as accessible descriptions. The final complete browser run and fresh PR
 review remain required. No real backend/proxy/container changes; pitfall review PASS.
+
+Phase 3 completes all 48 production-browser checks (46 Chromium and two WebKit)
+in 171.413 s, zero retries/flaky results, after the 84 unit/view checks and
+production build/typecheck. Inspected actual desktop/phone request evidence and
+scene captures: queue growth/recovery, retry, retained INCR and selected paths.
+The initial full run passed 47/48; mobile WebKit reported a non-finite value
+inside Playwright's injected hit-target listener while mouse-clicking Step after
+a focused range adjustment. Protocol click coordinates were finite and the click
+subsequently succeeded; the precise native-event cause was not captured. The
+touch-enabled smoke now activates through native taps (including trial hit checks),
+while desktop keeps clicks and both retain keyboard checks. Three focused native-
+tap runs and the full suite passed. Assertions, limits and fatal error collection
+are unchanged. Evidence: /tmp/s1-46-full/results.json and its screenshot/report
+artifacts, with source/bundle/lock SHA-256 provenance. Touch is browser emulation.
+Fresh exact-head PR review and hosted CI remain the merge gates.
