@@ -6,7 +6,7 @@ import type { BackendSnapshot, Command, Completion, Outcome, ProcessState, Recor
 
 interface Request {
   id: number; route: Route; createdAt: number; slowUs: number;
-  tried: number[]; attempt: number; stage: Stage; stageSince: number;
+  tried: number[]; attempt: number; attemptIncarnation?: number; stage: Stage; stageSince: number;
 }
 interface Attempt {
   id: number; request: number; backend: number; incarnation: number;
@@ -280,6 +280,7 @@ export class Engine {
       incarnation: target.incarnation, events: new Set(), entered: false };
     this.attempts.set(attempt.id, attempt);
     request.attempt = attempt.id;
+    request.attemptIncarnation = attempt.incarnation;
     this.totals.attempts++;
     target.attempts++;
     this.setStage(request, 'connecting');
@@ -547,7 +548,7 @@ export class Engine {
     const attempt = origin?.attempt ?? (request?.attempt || undefined);
     const event: SemanticEvent = { sequence: ++this.sequence, at: this.now, kind, message,
       request: requestId, attempt, backend, operation, outcome,
-      incarnation: origin?.incarnation ?? (attempt === undefined ? undefined : this.attempts.get(attempt)?.incarnation) ??
+      incarnation: origin?.incarnation ?? request?.attemptIncarnation ??
         this.backends.find(b => b.id === backend)?.incarnation,
       redisCommand: origin?.kind, redisResult: origin?.result };
     this.events.push(event);

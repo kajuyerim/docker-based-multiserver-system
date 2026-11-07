@@ -247,3 +247,13 @@ tap runs and the full suite passed. Assertions, limits and fatal error collectio
 are unchanged. Evidence: /tmp/s1-46-full/results.json and its screenshot/report
 artifacts, with source/bundle/lock SHA-256 provenance. Touch is browser emulation.
 Fresh exact-head PR review and hosted CI remain the merge gates.
+
+Fresh review of initial PR #60 found a pending-connection restart edge case:
+release removed the Attempt before retry/terminal evidence read its incarnation,
+so the current backend's newer incarnation could replace the original identity.
+The logical request now retains its current attempt's captured incarnation through
+release; Redis operation origin still takes precedence. Scheduling/event order is
+unchanged. A regression first reproduced the bug, then passed for retries enabled
+and disabled, including historical warnings and absent old-process path segments.
+All 85 unit/view checks, build/typecheck, and seven targeted retry/INCR/Chromium/
+WebKit browser checks pass. A new fresh review is required on the corrected head.

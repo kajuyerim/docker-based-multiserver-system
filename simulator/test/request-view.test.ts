@@ -72,6 +72,28 @@ describe('recorded request evidence', () => {
     expect(requestView(trace, removed, commit.sequence)!.component).toBe('redis');
   });
 
+  it('keeps the original process identity when a connecting attempt survives a restart', () => {
+    for (const retry of [true, false]) {
+      const engine = new Engine({ rate: 51, jitter: 0, replicas: 2, retry });
+      engine.command({ type: 'restart', backend: 1 }, 1);
+      engine.command({ type: 'traffic', rate: 0 }, 2);
+      engine.runFor(.2);
+      const snapshot = engine.snapshot(), trace = snapshot.traces.find(t => t.id === 1)!;
+      const original = trace.events.find(e => e.kind === 'routing')!;
+      const released = trace.events.find(e => e.kind === (retry ? 'retry' : 'terminal'))!;
+      expect(snapshot.backends[0]!.incarnation).toBe(2);
+      expect(released).toMatchObject({ request: 1, attempt: original.attempt, backend: 1, incarnation: 1 });
+      expect(trace.events.filter(e => e.attempt === original.attempt && e.backend === 1)
+        .every(e => e.incarnation === 1)).toBe(true);
+      const view = requestView(trace, snapshot, released.sequence)!;
+      expect(view.identity).toContain('incarnation 1');
+      expect(view.locationNote).toContain('Current app1 is incarnation 2');
+      expect(view.segment?.some(id => id === 'app1') ?? false).toBe(false);
+      expect(view.path.some(segment => segment.includes('app1'))).toBe(false);
+      expect(trace.outcome).toBe(retry ? 'success' : 'proxy_failure');
+    }
+  });
+
   it('retains the selected path independently of a saturated background buffer and keeps a fixed historical cursor', () => {
     const engine = new Engine({ replicas: 8, capacity: 200, rate: 500, jitter: 0 });
     engine.runFor(0.02); engine.pinTrace(1);
