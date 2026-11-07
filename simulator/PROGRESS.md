@@ -206,3 +206,13 @@ and model Step. Test/assertion/job limits and zero retries remain unchanged.
 The revised production bundle passed all 38 browser checks (36 Chromium and two
 WebKit), plus 75 unit checks and build/typecheck. The draw-call regression also
 covers selection, topology changes, reduced-motion changes, reset and resume.
+
+## S1 / #46 — request inspection, event evidence
+
+Phase 1 preserves Redis operation origin (request, attempt, backend incarnation),
+command kind and each INCR result through execution and acknowledgment. Terminal
+outcomes are typed and trace truncation has an explicit omitted-event count. No
+service cost, scheduler deadline or workload rule changes. Detached/restarted-origin
+and interleaved-INCR fixtures verify that later shared counts cannot replace an
+earlier reply's result. All 76 tests and typecheck passed; the opt-in benchmark was
+skipped. Pitfall review passed: real backend/proxy/container contracts are untouched.
