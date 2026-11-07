@@ -40,10 +40,38 @@ jobs:
         with:
           path: simulator/dist
 
+  browser:
+    name: Production browser acceptance
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: simulator
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '22.23.1'
+          cache: npm
+          cache-dependency-path: simulator/package-lock.json
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build
+      - run: npm run test:browser
+      - name: Preserve browser evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: simulator-browser-evidence
+          path: |
+            simulator/test-results/
+            simulator/playwright-report/
+          retention-days: 14
+
   deploy:
     name: Publish simulator
     if: github.ref == 'refs/heads/main'
-    needs: build
+    needs: [build, browser]
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:

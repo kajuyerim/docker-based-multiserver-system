@@ -358,14 +358,18 @@ document.addEventListener('visibilitychange', () => {
 media.addEventListener('change', () => { $<HTMLInputElement>('reduced-motion').checked = media.matches; update(); });
 
 renderInspector();
+$('app').dataset.ready = 'loading';
 try {
   await campus.mount($('campus'), select, id => {
     selectedRequest = id; $<HTMLInputElement>('trace-id').value = String(id); updateTrace();
     $('diagnostics').hidden = false; $('show-diagnostics').setAttribute('aria-expanded', 'true');
   });
+  update();
+  $('app').dataset.ready = 'ready';
 } catch (error) {
   $('campus').innerHTML = '<p style="padding:30px">The visual campus could not start. All controls, metrics, and the system summary below remain available.</p>';
   console.error(error);
+  $('app').dataset.ready = 'fallback';
 }
 update();
 let previous: number | undefined;

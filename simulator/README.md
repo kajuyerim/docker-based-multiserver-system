@@ -28,6 +28,43 @@ dependency notices. `npm run preview` serves that production bundle locally.
 `SIM_BENCHMARK_REPORT=/tmp/simulator-performance.json` to save its machine-readable
 report. It is separate from the quick unit suite.
 
+## Browser acceptance
+
+From this directory, test the actual production bundle at its repository base path:
+
+```sh
+npm ci
+npx playwright install chromium webkit
+npm run build
+npm run test:browser
+npm run test:browser:webkit
+```
+
+Chromium covers all four experiments, a saved baseline and matched candidate,
+capacity/failure controls, pause/step/reset, keyboard focus return, reduced motion,
+and the 1/3/8-replica matrix at 390×844, 768×1024 and 1280×720 plus orientation
+changes. WebKit provides a second-engine desktop and touch-enabled phone smoke
+path. Viewports/touch are browser emulation, not physical-device verification.
+The visibility test dispatches a hidden-page lifecycle event; separately check a
+real tab switch during manual acceptance.
+
+The ready signal requires renderer initialization and the first scene/UI update;
+an early control or loading shell is insufficient. Tests delay the renderer module
+and inject representative focus/occlusion and missing-asset faults to check these guards. Browser
+exceptions, console errors and failed assets fail the run. Tests use seed 476,
+bounded state-based waits and zero retries, with a five-minute overall limit.
+
+Failures retain a Playwright trace, screenshot, browser errors and UI/focus state.
+The JSON/HTML reports identify the source revision, source-tree hash, built-bundle
+hash and dependency-lock hash. View the report with `npx playwright show-report`.
+The workflow uploads these reports and viewport screenshots for 14 days and gates
+Pages deployment on the browser job as well as model tests/build.
+
+Keep manual visual review for art quality, scene readability and device performance.
+The baseline panel screenshots expose the existing scene-occlusion problem tracked
+in #45; its geometry checks build on this suite. A passing controls test does not
+claim that every canvas label is unobscured.
+
 ## GitHub Pages
 
 The project base is `/docker-based-multiserver-system/`. Open the
@@ -44,7 +81,7 @@ The workflow uploads **only `simulator/dist`**, excluding root documentation,
 reports, credentials, source maps, and local metadata. The generated model text and
 third-party license notices are intentional public files.
 
-[The simulator workflow](../.github/workflows/simulator.yml) runs tests and a build
+[The simulator workflow](../.github/workflows/simulator.yml) runs tests, a build and browser acceptance
 on simulator PRs. On main, it uploads the static artifact and deploys with official
 GitHub Pages actions pinned to immutable revisions. Configure the repository Pages
 source as GitHub Actions once eligibility is confirmed. PRs have only contents-read

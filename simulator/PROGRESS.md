@@ -80,3 +80,24 @@ The final implementation commit `26bea2f` passed Simulator CI `41926165052` (61 
 On 5 November 2026 the user explicitly approved public hosting. GitHub rejected Pages for the private repository because of the account plan. The user then explicitly authorized making the entire portfolio repository public. Before changing visibility, checked all 18 README revisions for academic identifiers, the historical submission template for real values, and tracked files for credential patterns. No academic IDs or credential-pattern matches were found; the older local handoff note about README IDs was stale. Local metadata and submission files remain untracked/ignored.
 
 Repository publication and Pages enablement succeeded. The configured URL is `https://kajuyerim.github.io/docker-based-multiserver-system/`, with `build_type=workflow` and public access. The release documentation now links that destination. Deployment and direct live acceptance will be verified after merge.
+
+## S1 / #44 — production browser acceptance (7 November 2026)
+
+Added a renderer/UI-ready signal, pinned Playwright, a production-preview suite at
+the repository base path, and a bounded Chromium CI job that gates Pages deployment.
+Local Node 22.23.1 validation: 61 model tests passed (one opt-in benchmark skipped),
+type-check/build passed, 19 Chromium checks passed with zero retries in 45.5 seconds,
+and WebKit desktop/emulated-phone smoke both passed. All four guided experiments
+reached Verified through normal controls; an unchanged candidate reproduced the
+baseline measurement window. Delayed renderer loading, missing built JavaScript,
+covered controls and incorrect focus were rejected by the relevant guards.
+
+The 1/3/8-replica matrix covers 390×844, 768×1024 and 1280×720 plus orientation
+changes, with actual panel actions and retained screenshots. Inspected desktop,
+tablet and phone screenshots confirm the existing component occlusion tracked by
+#45; this first gate verifies control journeys and does not claim that issue fixed.
+Reduced motion and a simulated hidden-page lifecycle event preserve usable controls.
+WebKit phone input/viewport and tab visibility are emulated, not physical-device or
+manual tab-switch evidence. Failure artifacts include runtime errors, focus/UI
+state, trace, screenshot, revision and source/bundle/lock hashes. PR CI and fresh
+independent review are required before merge.
